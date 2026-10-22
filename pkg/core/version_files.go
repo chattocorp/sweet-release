@@ -25,20 +25,19 @@ type VersionFile struct {
 }
 
 func readVersionFiles(data []byte) ([]VersionFile, error) {
-	var manifest struct {
-		Files yaml.Node `yaml:"version-files"`
-	}
-	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		return nil, err
-	}
-	if manifest.Files.Kind == 0 {
+	manifest, err := parsePackageManifest(data)
+	return manifest.VersionFiles, err
+}
+
+func versionFilesFromNode(node yaml.Node) ([]VersionFile, error) {
+	if node.Kind == 0 {
 		return nil, nil
 	}
-	if manifest.Files.Kind != yaml.SequenceNode {
+	if node.Kind != yaml.SequenceNode {
 		return nil, fmt.Errorf("version-files must be a list")
 	}
 	var files []VersionFile
-	for _, node := range manifest.Files.Content {
+	for _, node := range node.Content {
 		// Decode entries strictly while allowing unrelated package metadata.
 		encoded, err := yaml.Marshal(node)
 		if err != nil {

@@ -2,6 +2,13 @@ package core
 
 import "testing"
 
+func TestPackageManifestCompatibility(t *testing.T) {
+	manifest, err := parsePackageManifest([]byte("# metadata remains allowed\nversion: &version '1.2.3-beta.1+build'\nname: &name Sweet Release\ncustom: {value: *version}\nversion-files:\n  - {path: VERSION, format: text}\n"))
+	if err != nil || manifest.Version != "1.2.3-beta.1+build" || manifest.Name != "Sweet Release" || len(manifest.VersionFiles) != 1 {
+		t.Fatalf("manifest = %#v, error = %v", manifest, err)
+	}
+}
+
 func TestPackageDisplayName(t *testing.T) {
 	for _, raw := range []string{"null", "123", "[]", "''", "'  '", "' leading'", "\"two\\nlines\""} {
 		if _, err := readPackageVersion([]byte("version: 1.0.0\nname: " + raw)); err == nil {

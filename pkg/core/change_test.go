@@ -63,6 +63,23 @@ func TestCreateChangeFailure(t *testing.T) {
 	}
 }
 
+func TestCreateChangeRejectsInvalidVersions(t *testing.T) {
+	for _, version := range []string{"1.2", "v1.2.3", "01.2.3", "1.2.3-01", "1.2.3+", "invalid"} {
+		t.Run(version, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, ".sweet.yml"), []byte("version: '"+version+"'\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := CreateChange(dir, "fix", strings.NewReader("note")); err == nil || !strings.Contains(err.Error(), "invalid semantic version") {
+				t.Fatalf("expected version validation error, got %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(dir, ".sweet")); !os.IsNotExist(err) {
+				t.Fatalf("created notes directory: %v", err)
+			}
+		})
+	}
+}
+
 func TestInitPackageNotesConflict(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".sweet"), []byte("existing"), 0o644); err != nil {

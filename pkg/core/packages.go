@@ -56,15 +56,29 @@ func DiscoverPackages(root string) ([]Package, error) {
 }
 
 func discoverPackages(root string) ([]Package, []Problem, error) {
+	paths, err := repositoryFiles(root)
+	if err != nil {
+		return nil, nil, err
+	}
+	return packagesFromFiles(root, paths)
+}
+
+func repositoryFiles(root string) ([]string, error) {
 	// Include tracked and new files, while respecting Git ignore rules.
 	output, err := exec.Command("git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z").Output()
 	if err != nil {
-		return nil, nil, fmt.Errorf("discover package manifests: %w", err)
+		return nil, fmt.Errorf("discover repository files: %w", err)
 	}
+	paths := strings.Split(string(output), "\x00")
+	sort.Strings(paths)
+	return paths, nil
+}
+
+func packagesFromFiles(root string, paths []string) ([]Package, []Problem, error) {
 	var packages []Package
 	var problems []Problem
 	seen := make(map[string]bool)
-	for _, path := range strings.Split(string(output), "\x00") {
+	for _, path := range paths {
 		if filepath.Base(path) != ".sweet.yml" || seen[path] {
 			continue
 		}
@@ -76,10 +90,9 @@ func discoverPackages(root string) ([]Package, []Problem, error) {
 		var version string
 		var name string
 		if err == nil {
-			version, err = readPackageVersion(content)
-			if err == nil {
-				name, err = readPackageName(content)
-			}
+			var manifest packageManifest
+			manifest, err = parsePackageManifest(content)
+			version, name = manifest.Version, manifest.Name
 		}
 		if err != nil {
 			problems = append(problems, Problem{Path: path, Message: err.Error()})
@@ -91,38 +104,55 @@ func discoverPackages(root string) ([]Package, []Problem, error) {
 }
 
 func readPackageVersion(content []byte) (string, error) {
+	manifest, err := parsePackageManifest(content)
+	return manifest.Version, err
+}
+
+type packageManifest struct {
+	Version      string
+	Name         string
+	VersionFiles []VersionFile
+}
+
+func parsePackageManifest(content []byte) (packageManifest, error) {
+	var result packageManifest
 	var manifest struct {
 		Version yaml.Node `yaml:"version"`
+		Name    yaml.Node `yaml:"name"`
+		Files   yaml.Node `yaml:"version-files"`
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	if err := decoder.Decode(&manifest); err != nil {
-		return "", fmt.Errorf("decode package YAML: %w", err)
+		return result, fmt.Errorf("decode package YAML: %w", err)
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return "", fmt.Errorf("expected one YAML document")
+		return result, fmt.Errorf("expected one YAML document")
 	}
 	version := manifest.Version
 	if version.Kind != yaml.ScalarNode || version.Tag != "!!str" || strings.TrimSpace(version.Value) == "" || strings.ContainsAny(version.Value, " \t\r\n") {
-		return "", fmt.Errorf("version must be a non-empty string without whitespace")
+		return result, fmt.Errorf("version must be a non-empty string without whitespace")
 	}
-	if _, err := readVersionFiles(content); err != nil {
-		return "", err
+	if _, err := nextVersion(version.Value, "none"); err != nil {
+		return result, err
 	}
-	if _, err := readPackageName(content); err != nil {
-		return "", err
+	files, err := versionFilesFromNode(manifest.Files)
+	if err != nil {
+		return result, err
 	}
-	return version.Value, nil
+	name, err := packageNameFromNode(manifest.Name)
+	if err != nil {
+		return result, err
+	}
+	return packageManifest{Version: version.Value, Name: name, VersionFiles: files}, nil
 }
 
 func readPackageName(content []byte) (string, error) {
-	var manifest struct {
-		Name yaml.Node `yaml:"name"`
-	}
-	if err := yaml.Unmarshal(content, &manifest); err != nil {
-		return "", err
-	}
-	n := manifest.Name
+	manifest, err := parsePackageManifest(content)
+	return manifest.Name, err
+}
+
+func packageNameFromNode(n yaml.Node) (string, error) {
 	if n.Kind == 0 {
 		return "", nil
 	}

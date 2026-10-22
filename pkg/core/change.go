@@ -21,7 +21,7 @@ func CreateChange(dir, changeType string, content io.Reader) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read package manifest %s: %w", manifest, err)
 	}
-	if _, err := readPackageVersion(data); err != nil {
+	if _, err := parsePackageManifest(data); err != nil {
 		return "", fmt.Errorf("%s: %w", manifest, err)
 	}
 	types, err := ChangeTypes(dir)

@@ -45,7 +45,11 @@ func (p Problem) Error() string { return p.Path + ": " + p.Message }
 // It reads tracked and untracked notes, respecting Git ignore rules.
 // Packages with file problems have no calculated bump or next version.
 func RepositoryStatus(root string) ([]PackageStatus, error) {
-	packages, manifestProblems, err := discoverPackages(root)
+	paths, err := repositoryFiles(root)
+	if err != nil {
+		return nil, err
+	}
+	packages, manifestProblems, err := packagesFromFiles(root, paths)
 	if err != nil {
 		return nil, err
 	}
@@ -58,18 +62,24 @@ func RepositoryStatus(root string) ([]PackageStatus, error) {
 		policies[typ.Name] = typ.Bump
 	}
 	rank := map[string]int{"none": 0, "patch": 1, "minor": 2, "major": 3}
+	notes := make(map[string][]string)
+	for _, path := range paths {
+		dir := filepath.Dir(path)
+		if filepath.Base(dir) == ".sweet" && filepath.Ext(path) == ".md" {
+			pkg := filepath.ToSlash(filepath.Dir(dir))
+			notes[pkg] = append(notes[pkg], path)
+		}
+	}
+	packageProblems := make(map[string][]Problem)
+	for _, problem := range manifestProblems {
+		pkg := filepath.ToSlash(filepath.Dir(problem.Path))
+		packageProblems[pkg] = append(packageProblems[pkg], problem)
+	}
 	statuses := make([]PackageStatus, 0, len(packages))
 	for _, pkg := range packages {
-		changes, problems, err := readChanges(root, pkg)
-		if err != nil {
-			return nil, err
-		}
+		changes, problems := changesFromFiles(root, notes[pkg.Path])
 		status := PackageStatus{Package: pkg, Changes: changes, Bump: "none", Problems: problems}
-		for _, problem := range manifestProblems {
-			if filepath.ToSlash(filepath.Dir(problem.Path)) == pkg.Path {
-				status.Problems = append(status.Problems, problem)
-			}
-		}
+		status.Problems = append(status.Problems, packageProblems[pkg.Path]...)
 		for _, change := range changes {
 			bump, ok := policies[change.Type]
 			if !ok {
@@ -126,16 +136,27 @@ func readChanges(root string, pkg Package) ([]Change, []Problem, error) {
 	}
 	paths := strings.Split(string(output), "\x00")
 	sort.Strings(paths)
+	var names []string
+	for _, path := range paths {
+		if filepath.Dir(path) == ".sweet" && filepath.Ext(path) == ".md" {
+			names = append(names, filepath.ToSlash(filepath.Join(pkg.Path, path)))
+		}
+	}
+	changes, problems := changesFromFiles(root, names)
+	return changes, problems, nil
+}
+
+func changesFromFiles(root string, paths []string) ([]Change, []Problem) {
 	var changes []Change
 	var problems []Problem
 	seen := map[string]bool{}
 	for _, path := range paths {
-		if filepath.Dir(path) != ".sweet" || filepath.Ext(path) != ".md" || seen[path] {
+		if seen[path] {
 			continue
 		}
 		seen[path] = true
-		name := filepath.ToSlash(filepath.Join(pkg.Path, path))
-		data, err := os.ReadFile(filepath.Join(dir, path))
+		name := path
+		data, err := os.ReadFile(filepath.Join(root, path))
 		if os.IsNotExist(err) {
 			continue
 		}
@@ -151,7 +172,7 @@ func readChanges(root string, pkg Package) ([]Change, []Problem, error) {
 		change.Path = name
 		changes = append(changes, change)
 	}
-	return changes, problems, nil
+	return changes, problems
 }
 
 func parseChange(data []byte) (Change, error) {

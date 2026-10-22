@@ -101,7 +101,7 @@ func TestVersionFileConfiguration(t *testing.T) {
 			t.Errorf("accepted %s", config)
 		}
 	}
-	files, err := readVersionFiles([]byte("version-files: [{path: file, format: json, key: [literal.dot, version]}]"))
+	files, err := readVersionFiles([]byte("version: 1.2.3\nversion-files: [{path: file, format: json, key: [literal.dot, version]}]"))
 	if err != nil {
 		t.Fatal(err)
 	}
