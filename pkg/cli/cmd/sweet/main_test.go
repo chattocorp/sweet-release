@@ -7,6 +7,7 @@ import (
 )
 
 func TestRun(t *testing.T) {
+	t.Chdir(t.TempDir())
 	for _, tc := range []struct {
 		name        string
 		args        []string
@@ -14,7 +15,7 @@ func TestRun(t *testing.T) {
 		output      string
 		errorOutput string
 	}{
-		{name: "no arguments", output: "Usage:"},
+		{name: "no arguments", code: 2, errorOutput: "not a Sweet package"},
 		{name: "help", args: []string{"--help"}, output: "Usage:"},
 		{name: "short help", args: []string{"-h"}, output: "Usage:"},
 		{name: "version", args: []string{"--version"}, output: "sweet dev\n"},
