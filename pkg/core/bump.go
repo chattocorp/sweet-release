@@ -14,6 +14,10 @@ import (
 // Bump prepares releases for repository-relative package paths. An empty selection
 // selects all packages. It validates and prepares all edits before writing files.
 func Bump(root string, paths []string) ([]PackageStatus, error) {
+	root, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, err
+	}
 	statuses, err := RepositoryStatus(root)
 	if err != nil {
 		return nil, err
@@ -47,6 +51,7 @@ func Bump(root string, paths []string) ([]PackageStatus, error) {
 		return nil, err
 	}
 	var edits []releaseEdit
+	versionFiles := map[string]*versionFilePlan{}
 	var releases []PackageStatus
 	for _, status := range selected {
 		if len(status.Changes) == 0 || status.Bump == "none" {
@@ -54,6 +59,9 @@ func Bump(root string, paths []string) ([]PackageStatus, error) {
 		}
 		manifest, err := readReleaseEdit(filepath.Join(root, status.Path, ".sweet.yml"), false)
 		if err != nil {
+			return nil, err
+		}
+		if err := planVersionFiles(root, status, manifest.before, versionFiles); err != nil {
 			return nil, err
 		}
 		var doc yaml.Node
@@ -100,6 +108,18 @@ func Bump(root string, paths []string) ([]PackageStatus, error) {
 		}
 		releases = append(releases, status)
 	}
+	fileEdits, err := versionFileEdits(versionFiles)
+	if err != nil {
+		return nil, err
+	}
+	edits = append(fileEdits, edits...)
+	if err := applyReleaseEdits(edits); err != nil {
+		return nil, err
+	}
+	return releases, nil
+}
+
+func applyReleaseEdits(edits []releaseEdit) error {
 	for i, edit := range edits {
 		if err := edit.apply(); err != nil {
 			// Include the failed write: it might have truncated an existing file.
@@ -109,10 +129,10 @@ func Bump(root string, paths []string) ([]PackageStatus, error) {
 					errs = append(errs, fmt.Errorf("restore %s: %w", edits[j].path, rollbackErr))
 				}
 			}
-			return nil, errors.Join(errs...)
+			return errors.Join(errs...)
 		}
 	}
-	return releases, nil
+	return nil
 }
 
 type releaseEdit struct {

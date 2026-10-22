@@ -60,6 +60,10 @@ The snapshot runs tests and static checks, then creates archives and SHA-256
 checksums in `dist/` without publishing. It builds `sweet` for Linux, macOS,
 and Windows on amd64 and arm64. Windows archives use ZIP; the others use tar.gz.
 The binary's `--version` output contains the release or snapshot version.
+Local builds default to `cli.Version` in `pkg/cli/version.go`. The CLI package's
+`version-files` entry updates its annotated constant during `sweet bump`.
+The existing `-X main.version=...` linker option overrides the displayed version
+for release and snapshot builds.
 
 To publish a CLI release, update `pkg/cli/.sweet.yml` to the intended
 version and commit it with the release changes. Once that commit and the release
@@ -182,7 +186,8 @@ For each selected package that needs a version bump, the command updates
 `.sweet.yml`, creates or updates the package's `CHANGELOG.md`, and deletes the
 consumed `.sweet/*.md` notes. It uses the same version calculation as `sweet status`.
 The command changes local files; it does not commit, tag, publish, or create a PR.
-Other version files, such as `package.json`, are not updated.
+Other version files are updated only when listed in the package's `version-files`
+configuration, described below.
 
 New changelogs start with `# Changelog`. Each release has a version heading,
 with sections in repository configuration order. Types with the same section
@@ -202,6 +207,83 @@ An unrelated invalid package does not block an explicitly selected package.
 If a file operation fails, the command attempts to restore the affected files
 and reports any restoration errors. This does not protect against process
 interruption; review the Git diff before committing a release.
+
+## Update project version files
+
+Add `version-files` to a package's `.sweet.yml` to copy its next version into
+project files during `sweet bump`. Sweet does not detect project languages or
+run package managers. For example:
+
+```yaml
+version: 1.2.3
+version-files:
+  - path: package.json
+    format: json
+    key: version
+  - path: chart.yaml
+    format: yaml
+    key: appVersion
+  - path: pyproject.toml
+    format: toml
+    key: project.version
+  - path: VERSION
+    format: text
+  - path: version.go
+    format: annotated
+```
+
+Every entry requires `path` and `format`. Paths are relative to the package
+directory; `../` can address shared files inside the repository. Paths cannot
+leave the repository or pass through symlinks. Git files, Sweet manifests,
+repository configuration, changelogs, and `.sweet/` notes cannot be targets.
+Omit `version-files` or use an empty list when no other files need updates.
+
+For `json`, `yaml`, and `toml`, `key` selects an existing string field through
+mapping/table keys. Dots separate nested keys: `project.version` addresses
+`version` inside `project`. Use a list for literal keys that contain dots:
+
+```yaml
+version-files:
+  - path: metadata.json
+    format: json
+    key: ["my.project", version]
+```
+
+Selectors do not support arrays, wildcards, JSONPath, or XPath. TOML targets
+can use tables, dotted keys, or inline tables. YAML targets must be explicit
+plain or quoted strings; block scalars, tags, anchors, aliases, and inherited
+merge fields are not supported as version targets.
+
+With `format: text`, the entire file must contain a semantic version, with
+optional surrounding whitespace. With `format: annotated`, place `sweet-version`
+on each line that Sweet should update, usually in a comment:
+
+```go
+const Version = "1.2.3" // sweet-version
+```
+
+Each marked line must contain exactly one complete semantic version. All marked
+lines are updated; unmarked lines are retained. An optional `v` prefix is retained
+in annotated files. The annotation format treats the file as text and does not
+parse the source language or comment syntax. Neither plaintext format accepts
+`key`.
+
+Version files must use UTF-8. Sweet replaces only the selected version token,
+preserving surrounding content, comments, whitespace, and line endings. Existing
+values must be complete semantic versions. They need not match `.sweet.yml`:
+the package manifest is authoritative, and all targets receive its next version.
+Missing files, missing keys, invalid values, or ambiguous annotations stop the
+bump before it writes any release files or deletes notes.
+
+Multiple entries and packages can update different fields in the same file.
+Identical updates to one token are combined; conflicting updates fail before
+writing. Version-file updates participate in the same validation and attempted
+rollback as the rest of the release. Packages with no pending release do not
+update their version files.
+
+If the project needs lockfile regeneration, run its own command after a successful
+bump, such as `pnpm install` at the repository root, and include those changes in
+the release commit or PR. Sweet does not run post-bump scripts.
 
 ## Write release notes
 

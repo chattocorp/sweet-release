@@ -5,6 +5,7 @@
 - Configure change types, version bumps, and changelog sections.
 - Preview pending releases with `sweet status`.
 - Update package versions and generate changelogs with `sweet bump`.
+- Copy bumped versions into JSON, YAML, TOML, and plaintext files.
 - Use interactive pickers or explicit arguments and piped input.
 
 ## How it works
@@ -24,9 +25,9 @@ Each note has a change type and a Markdown body, with an optional breaking-chang
 flag. Sweet uses these notes and the configured policies to calculate the next
 semantic version. Running `sweet` without a command starts the change workflow.
 
-`sweet bump` updates `.sweet.yml`, adds release notes to `CHANGELOG.md`, and
-removes the consumed change files. It changes local files only: committing,
-tagging, and publishing are separate steps. Dependency propagation and updates
-to other version files, such as `package.json`, are not yet supported.
+`sweet bump` updates `.sweet.yml`, configured `version-files`, and `CHANGELOG.md`,
+then removes the consumed change files. It changes local files only: committing,
+tagging, and publishing are separate steps. Dependency propagation is not yet
+supported.
 
 See [AGENTS.md](AGENTS.md) for development instructions and detailed behavior.

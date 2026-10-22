@@ -92,5 +92,8 @@ func readPackageVersion(content []byte) (string, error) {
 	if version.Kind != yaml.ScalarNode || version.Tag != "!!str" || strings.TrimSpace(version.Value) == "" || strings.ContainsAny(version.Value, " \t\r\n") {
 		return "", fmt.Errorf("version must be a non-empty string without whitespace")
 	}
+	if _, err := readVersionFiles(content); err != nil {
+		return "", err
+	}
 	return version.Value, nil
 }
