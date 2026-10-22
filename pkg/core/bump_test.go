@@ -4,7 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -28,8 +27,21 @@ func TestReleaseEntryBreakingAndSharedSections(t *testing.T) {
 		{Type: "hidden", Body: "Hidden."},
 	}}
 	got := releaseEntry(status, []ChangeType{{Name: "feature", Section: "Changes"}, {Name: "fix", Section: "Changes"}})
-	if strings.Count(got, "### Changes") != 1 || !strings.Contains(got, "**Breaking change.**\n\nA new API.") || strings.Contains(got, "Hidden") {
+	want := "## 2.0.0\n\n### Changes\n\n- A fix.\n\n- **Breaking change.**\n\n  A new API.\n"
+	if got != want {
 		t.Fatal(got)
+	}
+}
+
+func TestReleaseEntryMultilineBullet(t *testing.T) {
+	status := PackageStatus{NextVersion: "1.1.0", Changes: []Change{
+		{Type: "feature", Body: "Add an API.\nWith more details.\n\nExample:\n\n```go\nCall()\n```\n\n- Nested item\n- Another item"},
+		{Type: "feature", Body: "Another change."},
+	}}
+	got := releaseEntry(status, []ChangeType{{Name: "feature", Section: "Features"}})
+	want := "## 1.1.0\n\n### Features\n\n- Add an API.\n  With more details.\n\n  Example:\n\n  ```go\n  Call()\n  ```\n\n  - Nested item\n  - Another item\n\n- Another change.\n"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
 

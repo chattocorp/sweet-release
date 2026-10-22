@@ -201,7 +201,14 @@ func releaseEntry(status PackageStatus, types []ChangeType) string {
 				body = "**Breaking change.**\n\n" + body
 			}
 			if body != "" {
-				bodies = append(bodies, body)
+				lines := strings.Split(body, "\n")
+				lines[0] = "- " + lines[0]
+				for i := 1; i < len(lines); i++ {
+					if lines[i] != "" {
+						lines[i] = "  " + lines[i]
+					}
+				}
+				bodies = append(bodies, strings.Join(lines, "\n"))
 			}
 		}
 		if len(bodies) > 0 {

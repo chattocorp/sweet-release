@@ -47,14 +47,7 @@ jobs:
           done < <(git ls-files --others --exclude-standard -z -- CHANGELOG.md '**/CHANGELOG.md')
 
           {
-            cat <<'BODY'
-          - Update package versions, changelogs, and configured version files with `sweet bump --all`.
-          - Consume pending notes to prepare the packages below for release.
-          - Verify formatting, Go race tests, static checks, and the CLI build before updating this PR.
-
-          Merging this PR only commits the prepared files; it does not tag or publish anything.
-          This branch and description are regenerated from `main`. Make corrections on `main`.
-          BODY
+            printf 'This PR prepares the following releases:\n'
 
             git -c core.quotePath=false diff --no-ext-diff --no-color --unified=0 -- CHANGELOG.md '**/CHANGELOG.md' |
               awk '

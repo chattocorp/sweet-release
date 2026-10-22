@@ -235,7 +235,8 @@ configuration, described below.
 New changelogs start with `# Changelog`. Each release has a version heading,
 with sections in repository configuration order. Types with the same section
 share a heading. Notes appear in filename order within each section. Markdown
-bodies retain their formatting, with surrounding whitespace removed; breaking
+bodies appear as bullet items, with continuation lines indented to retain their
+Markdown formatting and surrounding whitespace removed; breaking
 notes receive a bold label. Types without a section are omitted from the
 changelog but are still consumed. Existing introductions and release history
 are retained, with the new release inserted before the first level-two heading.
