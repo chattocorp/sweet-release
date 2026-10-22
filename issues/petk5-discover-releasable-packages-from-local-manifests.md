@@ -3,14 +3,14 @@ data:
   labels:
     - packages
     - cli
-  status: open
+  status: in_progress
   type: feature
 id: petk5
 title: Discover releasable packages from local manifests
 ---
 ## Context
 
-A directory becomes a package by containing a `.sweet.yml` manifest. The manifest will store its current released version, metadata, and dependencies expressed as paths to other packages.
+A directory becomes a package through a `.sweet.yml` manifest. Packages are identified by repository-relative paths, with `.` for the root; no name field is required.
 
 ## Acceptance criteria
 
@@ -19,6 +19,10 @@ A directory becomes a package by containing a `.sweet.yml` manifest. The manifes
 - Read the released version, metadata, and dependency paths from each manifest.
 - Resolve dependency references to discovered packages and report invalid manifests or unresolved references with useful file context.
 
-## Design dependency
+## Progress
 
-YAML filenames are agreed: `.sweet.yml` for packages and `.sweet.config.yml` for repository policy. Metadata fields and dependency-path rules remain open in gambb.
+Implemented `sweet list`: lists package paths and current versions, sorted by path, from anywhere in the Git repository. Includes tracked and untracked manifests, respects Git ignore rules, and reports invalid YAML or missing versions with manifest paths. Package initialization writes `version: 0.0.0`. Tests cover nested packages, root packages, ignored files, tracked files, empty repositories, and invalid manifests. Go tests and vet pass.
+
+## Remaining work
+
+Dependency metadata and reference resolution remain unimplemented, pending path rules in gambb.

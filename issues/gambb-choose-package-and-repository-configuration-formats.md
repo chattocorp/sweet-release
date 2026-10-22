@@ -15,17 +15,22 @@ title: Choose package and repository configuration formats
 - Keep repository policy separate from package metadata so the root can itself be a package.
 - `sweet init repo` creates `.sweet.config.yml` at the Git repository root, including when invoked from a subdirectory.
 - `sweet init package [dir]` creates `.sweet.yml` in the current directory or the given existing directory.
-- Init commands preserve existing files. Initial files contain a descriptive comment and an empty YAML mapping (`{}`), pending metadata decisions.
+- Init commands preserve existing files. Repository configuration starts as an empty YAML mapping.
+- Package manifests contain the current `version`; no name field is required. `sweet list` identifies packages by repository-relative path, using `.` for the root.
+
+## Current implementation defaults
+
+Package initialization writes `version: 0.0.0`. The version must be a non-empty YAML string without whitespace. Semantic version validation is deferred to version calculation.
 
 ## Decisions needed
 
-- Define package metadata, including the current released version and dependency paths.
+- Define dependency metadata.
 - Decide whether dependency paths are relative to the package or repository root. Package-relative paths remain a proposal.
 
 ## Implementation evidence
 
-Both init commands are implemented. Go tests cover locations, existing-file preservation, and invalid targets and arguments. `go test ./...` and `go vet ./...` pass.
+Both init commands and `sweet list` are implemented. Go tests and vet pass.
 
 ## Completion criteria
 
-Record the remaining metadata and dependency-path rules and examples.
+Record the remaining dependency metadata and path rules and examples.
