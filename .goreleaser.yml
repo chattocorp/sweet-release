@@ -4,8 +4,7 @@ project_name: sweet
 
 before:
   hooks:
-    - go test ./pkg/cli/... ./pkg/core/...
-    - go vet ./pkg/cli/... ./pkg/core/...
+    - bash {{ if index .Env "SWEET_GO_CHECK" }}{{ .Env.SWEET_GO_CHECK }}{{ else }}.github/scripts/check-go.sh{{ end }}
 
 builds:
   - id: sweet

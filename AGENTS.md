@@ -14,34 +14,32 @@ or updating issues. Read `issues/means.schema.json` before writing and use
 
 ## Development
 
-The repository uses a Go workspace with two modules:
-
-- `pkg/cli`: the `sweet` CLI, command output, and command integration tests.
-- `pkg/core`: package discovery, manifest parsing, and initialization.
-
-Each module has its own `.sweet.yml` and version. The root holds shared
-`.sweet.config.yml` configuration and `go.work`; it is not a release package.
-The CLI imports the core module. A local replacement in its `go.mod` also lets
-module commands resolve core when workspace mode is disabled.
+The repository uses one root Go module, `github.com/chattocorp/sweet-release`.
+Source packages remain in `pkg/cli` and `pkg/core`, with unchanged import paths.
+Each directory remains a separate Sweet release package with its own `.sweet.yml`,
+version, changelog, and directory-prefixed tags. The root is not a Sweet release
+package. New Go consumers must use a root-module commit or pseudo-version;
+the package release tags do not version the root Go module. Existing tags still
+contain their original nested modules.
 
 With the Go version from `mise.toml` installed, run these commands at the root:
 
 ```sh
 go run ./pkg/cli/cmd/sweet status
-go test ./pkg/cli/... ./pkg/core/...
-go vet ./pkg/cli/... ./pkg/core/...
+go test ./...
+go vet ./...
 go build -o bin/sweet ./pkg/cli/cmd/sweet
 ```
 
 The equivalent Mise tasks are `mise run sweet -- status`, `mise run check`, and
 `mise run build`. Use `mise run deploy` to install `sweet` into `~/.local/bin`.
-The root has no Go module, so use the module patterns above instead of `go test ./...`.
+Run all Go checks from the repository root.
 
 GitHub Actions runs CI on branch pushes and pull requests. It checks Go formatting,
-runs both modules' tests with race detection, runs `go vet`, and builds the CLI
+runs all tests with race detection, runs `go vet`, and builds the CLI
 on Linux. You can also start the CI workflow manually from the Actions tab.
 To run the additional checks locally, use `gofmt -l pkg` (no output means
-formatting is correct) and `go test -race ./pkg/cli/... ./pkg/core/...`.
+formatting is correct) and `go test -race ./...`.
 
 ## Releases
 
@@ -181,7 +179,10 @@ commit. Jobs for the same tag are serialized. Publishing failures leave tags
 intact; rerunning CI retries publishing, including tags that already exist.
 
 The workflow keeps its own build configuration and script when checking out an
-older tag. You can publish or retry an existing CLI tag from main manually:
+older tag. It selects `go.mod` for current source and `pkg/cli/go.mod` for
+historical source after checkout. The retained check script runs tests and vet
+for either layout; the build directory works with both. You can publish or retry
+an existing CLI tag from main manually:
 
 ```sh
 gh workflow run release.yml --ref main -f tag=pkg/cli/v0.1.0

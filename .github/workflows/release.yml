@@ -35,15 +35,14 @@ jobs:
       # Use this workflow's tooling even when publishing an older source tag.
       - uses: actions/setup-go@v7
         with:
-          go-version-file: pkg/cli/go.mod
-          cache-dependency-path: |
-            pkg/cli/go.sum
-            pkg/core/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - name: Preserve release tooling
         run: |
           go build -o "$RUNNER_TEMP/sweet-metadata" ./pkg/cli/cmd/sweet
           cp .goreleaser.yml "$RUNNER_TEMP/goreleaser.yml"
           cp .github/scripts/publish-cli.sh "$RUNNER_TEMP/publish-cli.sh"
+          cp .github/scripts/check-go.sh "$RUNNER_TEMP/check-go.sh"
       - name: Check out release source
         env:
           TAG: ${{ inputs.tag }}
@@ -53,10 +52,15 @@ jobs:
           commit=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
           [[ -z "$EXPECTED_COMMIT" || "$commit" == "$EXPECTED_COMMIT" ]]
           git checkout --detach "$commit"
+      - name: Select release Go module
+        id: release-go
+        run: |
+          echo "version-file=$(bash "$RUNNER_TEMP/check-go.sh" version-file)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v7
         with:
-          go-version-file: pkg/cli/go.mod
+          go-version-file: ${{ steps.release-go.outputs.version-file }}
           cache-dependency-path: |
+            go.sum
             pkg/cli/go.sum
             pkg/core/go.sum
       - uses: goreleaser/goreleaser-action@v7
@@ -69,4 +73,5 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ inputs.tag }}
           SWEET_METADATA: ${{ runner.temp }}/sweet-metadata
+          SWEET_GO_CHECK: ${{ runner.temp }}/check-go.sh
         run: bash "$RUNNER_TEMP/publish-cli.sh" "$TAG" "$RUNNER_TEMP/goreleaser.yml"

@@ -28,10 +28,8 @@ jobs:
           ref: main
       - uses: actions/setup-go@v7
         with:
-          go-version-file: pkg/cli/go.mod
-          cache-dependency-path: |
-            pkg/cli/go.sum
-            pkg/core/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - name: Plan release PRs
         id: plan
         run: |
@@ -58,10 +56,8 @@ jobs:
           ref: ${{ needs.plan.outputs.sha }}
       - uses: actions/setup-go@v7
         with:
-          go-version-file: pkg/cli/go.mod
-          cache-dependency-path: |
-            pkg/cli/go.sum
-            pkg/core/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - name: Prepare pending releases
         env:
           PACKAGES: ${{ toJSON(matrix.packages) }}
@@ -77,8 +73,8 @@ jobs:
         run: |
           git diff --check
           test -z "$(gofmt -l pkg)"
-          go test -race ./pkg/cli/... ./pkg/core/...
-          go vet ./pkg/cli/... ./pkg/core/...
+          go test -race ./...
+          go vet ./...
           go build -o "$RUNNER_TEMP/sweet" ./pkg/cli/cmd/sweet
       - name: Create or update release PR
         uses: peter-evans/create-pull-request@v8
