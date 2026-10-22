@@ -2,9 +2,7 @@ package core
 
 import (
 	"crypto/sha256"
-	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -67,9 +65,29 @@ type ReleasePR struct {
 	Packages []string `json:"packages"`
 }
 
+// ReleasePRDetails adds planned content without changing the plan command schema.
+type ReleasePRDetails struct {
+	ReleasePR
+	Releases []PlannedRelease `json:"releases"`
+	Body     string           `json:"body"`
+}
+
 // PlanReleasePRs returns the desired PRs without changing files or contacting
 // GitHub. Invalid packages or version targets fail the entire plan.
 func PlanReleasePRs(root string) ([]ReleasePR, error) {
+	details, err := PlanReleasePRDetails(root)
+	if err != nil {
+		return nil, err
+	}
+	prs := make([]ReleasePR, 0, len(details))
+	for _, detail := range details {
+		prs = append(prs, detail.ReleasePR)
+	}
+	return prs, nil
+}
+
+// PlanReleasePRDetails validates all edits and renders descriptions without writes.
+func PlanReleasePRDetails(root string) ([]ReleasePRDetails, error) {
 	root, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return nil, err
@@ -79,70 +97,37 @@ func PlanReleasePRs(root string) ([]ReleasePR, error) {
 		return nil, err
 	}
 	strategy := config.ReleasePRStrategy
-	statuses, err := repositoryStatus(root, config)
+	plan, err := prepareReleases(root, nil, strategy == "per-package", config)
 	if err != nil {
 		return nil, err
 	}
-	var problems []error
-	for _, status := range statuses {
-		for _, problem := range status.Problems {
-			problems = append(problems, problem)
-		}
-	}
-	if err := errors.Join(problems...); err != nil {
-		return nil, err
-	}
-	prs := []ReleasePR{}
+	prs := []ReleasePRDetails{}
 	combined := ReleasePR{Branch: "sweet/release", Title: "chore: prepare releases"}
-	allFiles := map[string]*versionFilePlan{}
-	type ownedReplacement struct {
-		versionReplacement
-		owner string
-	}
-	owners := map[string][]ownedReplacement{}
-	for _, status := range statuses {
-		if len(status.Changes) == 0 || status.Bump == "none" {
-			continue
-		}
-		manifest, err := os.ReadFile(filepath.Join(root, status.Path, ".sweet.yml"))
-		if err != nil {
-			return nil, err
-		}
-		files := map[string]*versionFilePlan{}
-		if err := planVersionFiles(root, status, manifest, files); err != nil {
-			return nil, err
-		}
-		for path, file := range files {
-			for _, replacement := range file.replacements {
-				for _, previous := range owners[path] {
-					if strategy == "per-package" && previous.owner != status.Path && replacement.start < previous.end && previous.start < replacement.end {
-						return nil, fmt.Errorf("%s and %s update the same version token in %s; use release-pr strategy: combined", previous.owner, status.Path, path)
-					}
-				}
-				owners[path] = append(owners[path], ownedReplacement{replacement, status.Path})
-			}
-			if existing := allFiles[path]; existing != nil {
-				existing.replacements = append(existing.replacements, file.replacements...)
-			} else {
-				allFiles[path] = file
-			}
-		}
+	for i, status := range plan.statuses {
 		combined.Packages = append(combined.Packages, status.Path)
 		if strategy == "per-package" {
-			prs = append(prs, ReleasePR{
+			pr := ReleasePR{
 				Branch:   packageReleaseBranch(status.Path),
 				Title:    fmt.Sprintf("chore: release %s %s", status.DisplayName(), status.NextVersion),
 				Packages: []string{status.Path},
-			})
+			}
+			prs = append(prs, describeReleasePR(pr, plan.content[i:i+1]))
 		}
 	}
-	if _, err := versionFileEdits(allFiles); err != nil {
-		return nil, err
-	}
 	if strategy == "combined" && len(combined.Packages) > 0 {
-		prs = append(prs, combined)
+		prs = append(prs, describeReleasePR(combined, plan.content))
 	}
 	return prs, nil
+}
+
+func describeReleasePR(pr ReleasePR, releases []PlannedRelease) ReleasePRDetails {
+	var body strings.Builder
+	body.WriteString("This PR prepares the following releases:\n")
+	for _, release := range releases {
+		_, notes, _ := strings.Cut(release.Changelog, "\n")
+		fmt.Fprintf(&body, "\n## %s\n\nTarget version: **%s**\n%s", release.Name, release.Version, notes)
+	}
+	return ReleasePRDetails{pr, releases, body.String()}
 }
 
 var branchSlugPattern = regexp.MustCompile(`[^a-z0-9]+`)

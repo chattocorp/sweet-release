@@ -79,15 +79,22 @@ Different fields in a shared file are allowed, but their PRs can have Git confli
 until the next run regenerates them from `main`. Dependency propagation is not
 implemented; selecting per-package mode does not coordinate dependent releases.
 
+Add `--details` to include `releases` and `body` on each planned PR. Each release
+has `path`, display `name`, target `version`, and the new `changelog` entry.
+The rendered `body` includes only these releases. The default JSON shape is
+unchanged. Both modes prepare and validate the same edits as `sweet bump`,
+including changelogs and consumed notes, without writing files. An explicit bump
+selection still validates only the selected packages.
+
 The PR contains updated manifests, changelogs, configured version files, and
 deletions of consumed notes. Notes with no version effect alone do not create a PR.
 Do not add a `branch-suffix`, which would create separate PR branches on each run.
 After merging or closing a PR, a later release can create a new PR.
 The PR description lists each package's target version and new changelog content,
-without previous release history. The workflow collects added changelog lines
-from `git diff` after `sweet bump`. It marks new changelogs with intent-to-add
-so first releases also appear in the diff, and writes the description outside
-the checkout.
+without previous release history. The workflow reads the description from
+`sweet release-pr plan --details` before `sweet bump` and writes it outside the
+checkout. First releases and packages with existing changelogs use the same
+planned content.
 
 Each run regenerates changes from `main`; it does not bump previous release
 branches again. Make corrections through `main`, since edits to generated branches
@@ -185,6 +192,13 @@ release version, avoiding its Pro-only support for prefixed tags. GitHub CLI
 publishes the artifacts against the existing `pkg/cli/v<version>` tag. No extra
 tags are created. The job checks the Linux binary's version and archive checksums
 before upload. Release notes come from that version's CLI changelog section.
+
+`sweet release-notes <changelog> --version <version>` reads one release body from
+an existing changelog. It excludes the version heading and earlier history,
+preserves the body, and ignores headings inside fenced code blocks. A missing
+version is an error. This command needs no repository configuration. Publishing
+uses the current metadata binary to read the tagged changelog, so older source
+tags do not need to support this command.
 
 Uploads go to a draft release, which is published only after all uploads succeed.
 A retry replaces assets in an unfinished draft; an already published release is

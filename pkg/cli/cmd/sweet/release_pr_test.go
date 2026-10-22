@@ -44,6 +44,15 @@ func TestReleasePRPlanCommand(t *testing.T) {
 	if prs[0].Packages[0] != "-api" || prs[1].Packages[0] != "nested/client with spaces" {
 		t.Fatalf("paths are not repository-relative: %+v", prs)
 	}
+	var details []core.ReleasePRDetails
+	if err := json.Unmarshal([]byte(invoke("release-pr", "plan", "--details")), &details); err != nil || len(details) != len(prs) {
+		t.Fatalf("invalid details: %+v, %v", details, err)
+	}
+	for i, detail := range details {
+		if detail.Branch != prs[i].Branch || len(detail.Releases) != 1 || !strings.Contains(detail.Body, "Feature.") {
+			t.Fatalf("wrong details: %+v", detail)
+		}
+	}
 	t.Chdir(root)
 	for _, pr := range prs {
 		invoke(append([]string{"bump", "--"}, pr.Packages...)...)

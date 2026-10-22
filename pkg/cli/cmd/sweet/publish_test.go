@@ -18,6 +18,13 @@ func TestCLIPublishing(t *testing.T) {
 	}
 	_, source, _, _ := runtime.Caller(0)
 	script := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/publish-cli.sh")
+	metadata := filepath.Join(t.TempDir(), "sweet-metadata")
+	build := exec.Command("go", "build", "-o", metadata, ".")
+	build.Dir = filepath.Dir(source)
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build metadata: %v: %s", err, out)
+	}
+	t.Setenv("TEST_METADATA", metadata)
 	for _, tc := range []struct {
 		name, state, failure, version string
 		wantFailure                   bool
@@ -44,7 +51,7 @@ func TestCLIPublishing(t *testing.T) {
 			}
 			write("pkg/cli/CHANGELOG.md", "# Changelog\n\n## "+tc.version+"\n\n- New feature.\n\n## 0.0.1\n\n- Old feature.\n")
 			write("bin/git", "#!/bin/sh\necho commit\n")
-			write("bin/sweet", "#!/bin/sh\nprintf '%s\\n' '[{\"path\":\"pkg/cli\",\"name\":\"Sweet Release\"}]'\n")
+			write("bin/sweet", "#!/bin/sh\nif [ \"$1\" = release-notes ]; then exec \"$TEST_METADATA\" \"$@\"; fi\nprintf '%s\\n' '[{\"path\":\"pkg/cli\",\"name\":\"Sweet Release\"}]'\n")
 			write("bin/goreleaser", `#!/bin/sh
 echo build >> "$TEST_LOG"
 [ "$TEST_FAILURE" != build ] || exit 1

@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -82,6 +83,111 @@ func releasePRFixture(t *testing.T) (string, func(string, string)) {
 		}
 	}
 	return root, write
+}
+
+func gitWorkingTreeSnapshot(t *testing.T, root string) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if entry.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		files[path] = string(data)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
+}
+
+func TestReleasePRDetailsMatchPreparedContent(t *testing.T) {
+	for _, strategy := range []string{"combined", "per-package"} {
+		t.Run(strategy, func(t *testing.T) {
+			root, write := releasePRFixture(t)
+			write(".sweet.config.yml", "release-pr: {strategy: "+strategy+"}\n")
+			for _, path := range []string{"a", "b"} {
+				write(path+"/.sweet.yml", "version: 1.0.0\nname: Package "+path+"\n")
+				write(path+"/.sweet/feature.md", "---\ntype: feature\n---\nNew feature.\n\n```md\n## Example\n```\n")
+				write(path+"/.sweet/chore.md", "---\ntype: chore\n---\nHidden chore.\n")
+			}
+			write("b/CHANGELOG.md", "# Existing introduction\n\n## 1.0.0\n\nOld history.\n")
+			before := gitWorkingTreeSnapshot(t, root)
+			details, err := PlanReleasePRDetails(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if after := gitWorkingTreeSnapshot(t, root); !reflect.DeepEqual(before, after) {
+				t.Fatal("planning changed files")
+			}
+			plain, err := PlanReleasePRs(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, detail := range details {
+				if !reflect.DeepEqual(plain[i], detail.ReleasePR) {
+					t.Fatal("plan schemas disagree")
+				}
+				if strings.Contains(detail.Body, "Old history") || strings.Contains(detail.Body, "Hidden chore") {
+					t.Fatalf("unexpected content: %s", detail.Body)
+				}
+				if _, err := Bump(root, detail.Packages); err != nil {
+					t.Fatal(err)
+				}
+				for _, release := range detail.Releases {
+					data, err := os.ReadFile(filepath.Join(root, release.Path, "CHANGELOG.md"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					notes, err := ChangelogRelease(string(data), release.Version)
+					_, expected, _ := strings.Cut(release.Changelog, "\n")
+					if err != nil || strings.TrimSpace(notes) != strings.TrimSpace(expected) {
+						t.Fatalf("planned content differs: %s, %v", data, err)
+					}
+					if !strings.Contains(detail.Body, "## "+release.Name) || !strings.Contains(detail.Body, "Target version: **"+release.Version+"**") {
+						t.Fatalf("missing metadata: %s", detail.Body)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestReleasePRPlanValidatesReleaseFiles(t *testing.T) {
+	for _, path := range []string{"CHANGELOG.md", ".sweet/note.md"} {
+		t.Run(path, func(t *testing.T) {
+			root, write := releasePRFixture(t)
+			write("a/.sweet.yml", "version: 1.0.0\n")
+			write("a/.sweet/note.md", "---\ntype: feature\n---\nFeature\n")
+			if path == "CHANGELOG.md" {
+				if err := os.Mkdir(filepath.Join(root, "a", path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				// Inventory follows note symlinks, but release preparation must reject them.
+				write("target.md", "---\ntype: feature\n---\nFeature\n")
+				if err := os.Remove(filepath.Join(root, "a", path)); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink("../../target.md", filepath.Join(root, "a", path)); err != nil {
+					t.Skip(err)
+				}
+			}
+			if _, err := PlanReleasePRs(root); err == nil {
+				t.Fatal("planning accepted invalid release file")
+			}
+			if _, err := Bump(root, []string{"a"}); err == nil {
+				t.Fatal("bump accepted invalid release file")
+			}
+		})
+	}
 }
 
 func TestPlanReleasePRs(t *testing.T) {

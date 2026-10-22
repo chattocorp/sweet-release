@@ -8,11 +8,12 @@ import (
 )
 
 func newReleasePRCommand() *cobra.Command {
+	var details bool
 	cmd := &cobra.Command{
 		Use:   "release-pr",
 		Short: "Plan release pull requests for automation",
 	}
-	cmd.AddCommand(&cobra.Command{
+	plan := &cobra.Command{
 		Use:   "plan",
 		Short: "Print the configured release PRs as JSON without changing files",
 		Args:  cobra.NoArgs,
@@ -21,12 +22,19 @@ func newReleasePRCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			prs, err := core.PlanReleasePRs(root)
+			var prs any
+			if details {
+				prs, err = core.PlanReleasePRDetails(root)
+			} else {
+				prs, err = core.PlanReleasePRs(root)
+			}
 			if err != nil {
 				return err
 			}
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(prs)
 		},
-	})
+	}
+	plan.Flags().BoolVar(&details, "details", false, "Include planned releases and rendered PR descriptions")
+	cmd.AddCommand(plan)
 	return cmd
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -14,13 +15,40 @@ import (
 // Bump prepares releases for repository-relative package paths. An empty selection
 // selects all packages. It validates and prepares all edits before writing files.
 func Bump(root string, paths []string) ([]PackageStatus, error) {
+	plan, err := prepareReleases(root, paths, false, RepositoryConfig{})
+	if err != nil {
+		return nil, err
+	}
+	if err := applyReleaseEdits(plan.edits); err != nil {
+		return nil, err
+	}
+	return plan.statuses, nil
+}
+
+type releasePreparation struct {
+	statuses []PackageStatus
+	content  []PlannedRelease
+	edits    []releaseEdit
+}
+
+// PlannedRelease is the new release content, without previous changelog history.
+type PlannedRelease struct {
+	Path      string `json:"path"`
+	Name      string `json:"name"`
+	Version   string `json:"version"`
+	Changelog string `json:"changelog"`
+}
+
+func prepareReleases(root string, paths []string, independent bool, config RepositoryConfig) (*releasePreparation, error) {
 	root, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return nil, err
 	}
-	config, err := LoadRepositoryConfig(root)
-	if err != nil {
-		return nil, err
+	if config.ChangeTypes == nil {
+		config, err = LoadRepositoryConfig(root)
+		if err != nil {
+			return nil, err
+		}
 	}
 	statuses, err := repositoryStatus(root, config)
 	if err != nil {
@@ -43,10 +71,15 @@ func Bump(root string, paths []string) ([]PackageStatus, error) {
 		}
 		selected = append(selected, status)
 	}
+	var missing []string
 	for path, found := range wanted {
 		if !found {
-			problems = append(problems, fmt.Errorf("%s is not a Sweet package", path))
+			missing = append(missing, path)
 		}
+	}
+	sort.Strings(missing)
+	for _, path := range missing {
+		problems = append(problems, fmt.Errorf("%s is not a Sweet package", path))
 	}
 	if err := errors.Join(problems...); err != nil {
 		return nil, err
@@ -54,6 +87,12 @@ func Bump(root string, paths []string) ([]PackageStatus, error) {
 	var edits []releaseEdit
 	versionFiles := map[string]*versionFilePlan{}
 	var releases []PackageStatus
+	plan := &releasePreparation{}
+	type ownedReplacement struct {
+		versionReplacement
+		owner string
+	}
+	owners := map[string][]ownedReplacement{}
 	for _, status := range selected {
 		if len(status.Changes) == 0 || status.Bump == "none" {
 			continue
@@ -62,8 +101,30 @@ func Bump(root string, paths []string) ([]PackageStatus, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := planVersionFiles(root, status, manifest.before, versionFiles); err != nil {
+		files := map[string]*versionFilePlan{}
+		if err := planVersionFiles(root, status, manifest.before, files); err != nil {
 			return nil, err
+		}
+		filePaths := make([]string, 0, len(files))
+		for path := range files {
+			filePaths = append(filePaths, path)
+		}
+		sort.Strings(filePaths)
+		for _, path := range filePaths {
+			file := files[path]
+			for _, replacement := range file.replacements {
+				for _, previous := range owners[path] {
+					if independent && previous.owner != status.Path && replacement.start < previous.end && previous.start < replacement.end {
+						return nil, fmt.Errorf("%s and %s update the same version token in %s; use release-pr strategy: combined", previous.owner, status.Path, path)
+					}
+				}
+				owners[path] = append(owners[path], ownedReplacement{replacement, status.Path})
+			}
+			if existing := versionFiles[path]; existing != nil {
+				existing.replacements = append(existing.replacements, file.replacements...)
+			} else {
+				versionFiles[path] = file
+			}
 		}
 		var doc yaml.Node
 		if err := yaml.Unmarshal(manifest.before, &doc); err != nil {
@@ -101,7 +162,9 @@ func Bump(root string, paths []string) ([]PackageStatus, error) {
 		if strings.TrimSpace(introduction) == "" {
 			introduction = "# " + status.DisplayName() + " Changelog\n"
 		}
-		changelog.after = []byte(insertRelease(introduction, releaseEntry(status, types)))
+		entry := releaseEntry(status, types)
+		changelog.after = []byte(insertRelease(introduction, entry))
+		plan.content = append(plan.content, PlannedRelease{status.Path, status.DisplayName(), status.NextVersion, entry})
 		edits = append(edits, manifest, changelog)
 		for _, change := range status.Changes {
 			edit, err := readReleaseEdit(filepath.Join(root, change.Path), false)
@@ -118,10 +181,8 @@ func Bump(root string, paths []string) ([]PackageStatus, error) {
 		return nil, err
 	}
 	edits = append(fileEdits, edits...)
-	if err := applyReleaseEdits(edits); err != nil {
-		return nil, err
-	}
-	return releases, nil
+	plan.edits, plan.statuses = edits, releases
+	return plan, nil
 }
 
 func applyReleaseEdits(edits []releaseEdit) error {
@@ -229,21 +290,9 @@ func insertRelease(existing, entry string) string {
 	if strings.TrimSpace(existing) == "" {
 		return "# Changelog\n\n" + entry
 	}
-	offset := 0
-	fence := ""
-	for _, line := range strings.SplitAfter(existing, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if fence != "" {
-			if strings.HasPrefix(trimmed, fence) && strings.Trim(trimmed, fence[:1]) == "" {
-				fence = ""
-			}
-		} else if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-			char := trimmed[:1]
-			fence = trimmed[:len(trimmed)-len(strings.TrimLeft(trimmed, char))]
-		} else if strings.HasPrefix(line, "## ") {
-			return existing[:offset] + entry + "\n" + existing[offset:]
-		}
-		offset += len(line)
+	if headings := changelogHeadings(existing); len(headings) > 0 {
+		offset := headings[0].start
+		return existing[:offset] + entry + "\n" + existing[offset:]
 	}
 	return strings.TrimRight(existing, "\r\n") + "\n\n" + entry
 }

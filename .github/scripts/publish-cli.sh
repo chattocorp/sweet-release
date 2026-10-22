@@ -27,11 +27,7 @@ goreleaser release --snapshot --clean --config "$config"
 (cd dist && sha256sum --check checksums.txt)
 notes=$(mktemp)
 trap 'rm -f "$notes"' EXIT
-awk -v heading="## $version" '
-  /^## / { if (found) exit; if ($0 == heading) { found=1; next } }
-  found { print }
-  END { if (!found) exit 1 }
-' pkg/cli/CHANGELOG.md > "$notes"
+"$metadata" release-notes pkg/cli/CHANGELOG.md --version "$version" > "$notes"
 
 prerelease=false
 [[ "${version%%+*}" != *-* ]] || prerelease=true
