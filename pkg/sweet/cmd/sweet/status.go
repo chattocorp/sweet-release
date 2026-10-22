@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/chattocorp/sweet-release/pkg/core"
+	"github.com/chattocorp/sweet-release/pkg/sweet/core"
 	"github.com/spf13/cobra"
 	"strings"
 	"text/tabwriter"

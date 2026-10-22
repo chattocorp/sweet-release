@@ -16,19 +16,14 @@ func TestRetainedReleaseChecks(t *testing.T) {
 	}
 	_, source, _, _ := runtime.Caller(0)
 	script := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/check-go.sh")
-	for _, legacy := range []bool{false, true} {
-		name := "root"
-		patterns := "./..."
-		if legacy {
-			name = "historical"
-			patterns = "./pkg/cli/... ./pkg/core/..."
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, layout := range []struct{ name, mod, patterns string }{
+		{"sweet", "pkg/sweet/go.mod", "./pkg/sweet/..."},
+		{"root", "go.mod", "./..."},
+		{"historical", "pkg/cli/go.mod", "./pkg/cli/... ./pkg/core/..."},
+	} {
+		t.Run(layout.name, func(t *testing.T) {
 			dir := t.TempDir()
-			mod := "go.mod"
-			if legacy {
-				mod = "pkg/cli/go.mod"
-			}
+			mod := layout.mod
 			if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, mod)), 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -48,7 +43,7 @@ func TestRetainedReleaseChecks(t *testing.T) {
 			cmd.Dir = dir
 			cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 			out, err := cmd.CombinedOutput()
-			want := "test " + patterns + "\nvet " + patterns + "\n"
+			want := "test " + layout.patterns + "\nvet " + layout.patterns + "\n"
 			if err != nil || string(out) != want {
 				t.Fatalf("checks: %s, %v; want %s", out, err, want)
 			}

@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/chattocorp/sweet-release/pkg/core"
+	"github.com/chattocorp/sweet-release/pkg/sweet/core"
 	"github.com/sahilm/fuzzy"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"

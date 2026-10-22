@@ -1,4 +1,4 @@
-module github.com/chattocorp/sweet-release
+module github.com/chattocorp/sweet-release/pkg/sweet
 
 go 1.27.0
 

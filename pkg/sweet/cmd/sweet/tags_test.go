@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -59,7 +60,7 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 	}
 	commit := func(version string) string {
 		t.Helper()
-		for _, file := range []string{".sweet.yml", "pkg/api/.sweet.yml"} {
+		for _, file := range []string{".sweet.yml", "pkg/api/.sweet.yml", "pkg/sweet/.sweet.yml", "pkg/cli/.sweet.yml", "pkg/core/.sweet.yml", "pkg/docs/.sweet.yml"} {
 			write(filepath.Join(root, file), "version: "+version+"\n")
 		}
 		git(root, "add", ".")
@@ -77,12 +78,26 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 	write(wrapper, "#!/bin/sh\nexec \"$SWEET_TEST_BINARY\" -test.run='^TestTagPlannerProcess$' -- \"$@\"\n")
 	invoke := func(base, head string, fail bool) {
 		t.Helper()
+		output := filepath.Join(t.TempDir(), "output")
 		cmd := exec.Command("bash", script, wrapper, base, head)
 		cmd.Dir = root
-		cmd.Env = append(os.Environ(), "SWEET_TAG_TEST_PROCESS=1", "SWEET_TEST_BINARY="+bin, "GITHUB_STEP_SUMMARY=")
+		cmd.Env = append(os.Environ(), "SWEET_TAG_TEST_PROCESS=1", "SWEET_TEST_BINARY="+bin, "GITHUB_STEP_SUMMARY=", "GITHUB_OUTPUT="+output)
 		out, err := cmd.CombinedOutput()
 		if (err != nil) != fail {
 			t.Fatalf("tag workflow: %v: %s", err, out)
+		}
+		if !fail {
+			data, err := os.ReadFile(output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var releases []struct{ Tag, Commit string }
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(strings.TrimSpace(string(data)), "cli-releases=")), &releases); err != nil {
+				t.Fatal(err)
+			}
+			if len(releases) != 2 || !strings.HasPrefix(releases[0].Tag, "pkg/cli/v") || !strings.HasPrefix(releases[1].Tag, "pkg/sweet/v") || releases[0].Commit != head || releases[1].Commit != head {
+				t.Fatalf("wrong publish matrix: %s", data)
+			}
 		}
 	}
 	invoke(base, head, false)

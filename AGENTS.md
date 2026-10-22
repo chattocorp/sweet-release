@@ -14,21 +14,29 @@ or updating issues. Read `issues/means.schema.json` before writing and use
 
 ## Development
 
-The repository uses one root Go module, `github.com/chattocorp/sweet-release`.
-Source packages remain in `pkg/cli` and `pkg/core`, with unchanged import paths.
-Each directory remains a separate Sweet release package with its own `.sweet.yml`,
-version, changelog, and directory-prefixed tags. The root is not a Sweet release
-package. New Go consumers must use a root-module commit or pseudo-version;
-the package release tags do not version the root Go module. Existing tags still
-contain their original nested modules.
+The software is one Sweet release package and Go module in `pkg/sweet`:
+
+- `cmd/sweet`: the CLI and command integration tests.
+- `core`: package discovery, release planning, and file updates.
+- `version.go`: the CLI version, updated by the package manifest.
+
+The module path is `github.com/chattocorp/sweet-release/pkg/sweet`. Core imports
+use `github.com/chattocorp/sweet-release/pkg/sweet/core`. The root `go.work`
+contains this module; future packages, such as a docs website, can release
+independently. The root is not a release package.
+
+The unified package starts from CLI version 0.1.0 and retains the CLI changelog.
+The retired core changelog in `pkg/sweet/core/CHANGELOG.md` is historical only.
+New tags use `pkg/sweet/v<version>`, which also versions the nested Go module.
+Existing `pkg/cli/v` and `pkg/core/v` tags retain their original source layouts.
 
 With the Go version from `mise.toml` installed, run these commands at the root:
 
 ```sh
-go run ./pkg/cli/cmd/sweet status
-go test ./...
-go vet ./...
-go build -o bin/sweet ./pkg/cli/cmd/sweet
+go run ./pkg/sweet/cmd/sweet status
+go test ./pkg/sweet/...
+go vet ./pkg/sweet/...
+go build -o bin/sweet ./pkg/sweet/cmd/sweet
 ```
 
 The equivalent Mise tasks are `mise run sweet -- status`, `mise run check`, and
@@ -39,7 +47,7 @@ GitHub Actions runs CI on branch pushes and pull requests. It checks Go formatti
 runs all tests with race detection, runs `go vet`, and builds the CLI
 on Linux. You can also start the CI workflow manually from the Actions tab.
 To run the additional checks locally, use `gofmt -l pkg` (no output means
-formatting is correct) and `go test -race ./...`.
+formatting is correct) and `go test -race ./pkg/sweet/...`.
 
 ## Releases
 
@@ -173,24 +181,27 @@ tags, reruns, conflicts, atomic rejection, and recovery without contacting GitHu
 ### CLI publishing
 
 After tags are pushed, the tag workflow calls `.github/workflows/release.yml`
-for each `pkg/cli` release in the plan. Core-only releases do not build binaries.
+for each software release in the plan. Only `pkg/sweet` and historical `pkg/cli`
+releases build binaries; docs and retired core releases do not.
 Each job checks out the exact tag commit and verifies it against the planner's
 commit. Jobs for the same tag are serialized. Publishing failures leave tags
 intact; rerunning CI retries publishing, including tags that already exist.
 
 The workflow keeps its own build configuration and script when checking out an
-older tag. It selects `go.mod` for current source and `pkg/cli/go.mod` for
-historical source after checkout. The retained check script runs tests and vet
-for either layout; the build directory works with both. You can publish or retry
+older tag. It selects `pkg/sweet/go.mod` for current source, root `go.mod`
+for the intermediate layout, and `pkg/cli/go.mod` for historical source after
+checkout. The retained check script runs tests and vet for each layout. The tag
+selects the build directory, manifest, and changelog: `pkg/sweet` for new tags
+and `pkg/cli` for historical tags. You can publish or retry
 an existing CLI tag from main manually:
 
 ```sh
-gh workflow run release.yml --ref main -f tag=pkg/cli/v0.1.0
+gh workflow run release.yml --ref main -f tag=pkg/sweet/v0.1.0
 ```
 
 GoReleaser's free edition builds archives in snapshot mode with an explicit
 release version, avoiding its Pro-only support for prefixed tags. GitHub CLI
-publishes the artifacts against the existing `pkg/cli/v<version>` tag. No extra
+publishes the artifacts against the existing package tag. No extra
 tags are created. The job checks the Linux binary's version and archive checksums
 before upload. Release notes come from that version's CLI changelog section.
 
@@ -218,7 +229,7 @@ The snapshot runs tests and static checks, then creates archives and SHA-256
 checksums in `dist/` without publishing. It builds `sweet` for Linux, macOS,
 and Windows on amd64 and arm64. Windows archives use ZIP; the others use tar.gz.
 The binary's `--version` output contains the release or snapshot version.
-Local builds default to `cli.Version` in `pkg/cli/version.go`. The CLI package's
+Local builds default to `sweet.Version` in `pkg/sweet/version.go`. The Sweet package's
 `version-files` entry updates its annotated constant during `sweet bump`.
 The `-X main.version=...` linker option overrides the displayed version
 for release and snapshot builds.
@@ -331,7 +342,7 @@ calculate versions. `sweet bump` uses the sections to generate changelog entries
 
 ```sh
 sweet bump                    # Choose pending releases interactively
-sweet bump pkg/core pkg/cli   # Prepare multiple packages from the repository root
+sweet bump pkg/api pkg/web   # Prepare multiple packages from the repository root
 sweet bump .                  # Prepare the package in the current directory
 sweet bump --all              # Prepare all eligible packages from any directory
 ```
@@ -486,8 +497,8 @@ such as `code --wait`; they run through `sh`. Sweet waits for the editor to exit
 and keeps the file if the editor fails.
 
 ```sh
-sweet change pkg/core
-printf 'Add package discovery.\n' | sweet change pkg/cli --type feature --stdin
+sweet change pkg/sweet
+printf 'Add package discovery.\n' | sweet change pkg/sweet --type feature --stdin
 ```
 
 `--stdin` writes input verbatim as the Markdown body below the generated frontmatter

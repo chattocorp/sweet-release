@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chattocorp/sweet-release/pkg/cli"
+	"github.com/chattocorp/sweet-release/pkg/sweet"
 )
 
 func TestRun(t *testing.T) {
@@ -20,7 +20,7 @@ func TestRun(t *testing.T) {
 		{name: "no arguments", code: 2, errorOutput: "not a Sweet package"},
 		{name: "help", args: []string{"--help"}, output: "Usage:"},
 		{name: "short help", args: []string{"-h"}, output: "Usage:"},
-		{name: "version", args: []string{"--version"}, output: "sweet " + cli.Version + "\n"},
+		{name: "version", args: []string{"--version"}, output: "sweet " + sweet.Version + "\n"},
 		{name: "unknown command", args: []string{"release"}, code: 2, errorOutput: "unknown command"},
 		{name: "unknown flag", args: []string{"--unknown"}, code: 2, errorOutput: "unknown flag"},
 	} {

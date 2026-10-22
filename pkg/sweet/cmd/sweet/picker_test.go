@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/chattocorp/sweet-release/pkg/core"
+	"github.com/chattocorp/sweet-release/pkg/sweet/core"
 )
 
 func updatePicker(m pickerModel, msg tea.Msg) pickerModel {

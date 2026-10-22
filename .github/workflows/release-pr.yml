@@ -28,12 +28,12 @@ jobs:
           ref: main
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: pkg/sweet/go.mod
+          cache-dependency-path: pkg/sweet/go.sum
       - name: Plan release PRs
         id: plan
         run: |
-          prs=$(go run ./pkg/cli/cmd/sweet release-pr plan)
+          prs=$(go run ./pkg/sweet/cmd/sweet release-pr plan)
           # GitHub limits a job matrix to 256 entries.
           jq -e 'length <= 256' <<< "$prs" > /dev/null
           printf 'prs=%s\n' "$prs" >> "$GITHUB_OUTPUT"
@@ -56,26 +56,26 @@ jobs:
           ref: ${{ needs.plan.outputs.sha }}
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: pkg/sweet/go.mod
+          cache-dependency-path: pkg/sweet/go.sum
       - name: Prepare pending releases
         env:
           PACKAGES: ${{ toJSON(matrix.packages) }}
           RELEASE_BRANCH: ${{ matrix.branch }}
         run: |
-          go run ./pkg/cli/cmd/sweet release-pr plan --details > "$RUNNER_TEMP/release-plan.json"
+          go run ./pkg/sweet/cmd/sweet release-pr plan --details > "$RUNNER_TEMP/release-plan.json"
           jq -er --arg branch "$RELEASE_BRANCH" '.[] | select(.branch == $branch) | .body' \
             "$RUNNER_TEMP/release-plan.json" > "$RUNNER_TEMP/release-pr-body.md"
           mapfile -d '' -t packages < <(jq -j '.[] | ., "\u0000"' <<< "$PACKAGES")
-          go run ./pkg/cli/cmd/sweet bump -- "${packages[@]}"
+          go run ./pkg/sweet/cmd/sweet bump -- "${packages[@]}"
       # Project-specific steps, such as regenerating lockfiles, belong here.
       - name: Verify prepared changes
         run: |
           git diff --check
           test -z "$(gofmt -l pkg)"
-          go test -race ./...
-          go vet ./...
-          go build -o "$RUNNER_TEMP/sweet" ./pkg/cli/cmd/sweet
+          go test -race ./pkg/sweet/...
+          go vet ./pkg/sweet/...
+          go build -o "$RUNNER_TEMP/sweet" ./pkg/sweet/cmd/sweet
       - name: Create or update release PR
         uses: peter-evans/create-pull-request@v8
         with:

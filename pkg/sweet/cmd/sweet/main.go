@@ -5,12 +5,12 @@ import (
 	"io"
 	"os"
 
-	"github.com/chattocorp/sweet-release/pkg/cli"
+	"github.com/chattocorp/sweet-release/pkg/sweet"
 	"github.com/spf13/cobra"
 )
 
 // version can be set at build time with -ldflags '-X main.version=...'.
-var version = cli.Version
+var version = sweet.Version
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))

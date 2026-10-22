@@ -8,7 +8,7 @@ before:
 
 builds:
   - id: sweet
-    dir: pkg/cli
+    dir: pkg/sweet
     main: ./cmd/sweet
     binary: sweet
     env:

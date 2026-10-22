@@ -4,21 +4,21 @@ goreleaser = "2.18.2"
 
 [tasks.sweet]
 description = "Run sweet from source (forwards CLI arguments)"
-dir = "{{config_root}}/pkg/cli/cmd/sweet"
+dir = "{{config_root}}/pkg/sweet/cmd/sweet"
 run = "go run ."
 
 [tasks.deploy]
 description = "Install sweet into ~/.local/bin"
 env.GOBIN = "{{env.HOME}}/.local/bin"
-run = "go install ./pkg/cli/cmd/sweet"
+run = "go install ./pkg/sweet/cmd/sweet"
 
 [tasks.build]
 description = "Build the sweet CLI"
-run = "go build -o bin/sweet ./pkg/cli/cmd/sweet"
+run = "go build -o bin/sweet ./pkg/sweet/cmd/sweet"
 
 [tasks.test]
 description = "Run Go tests"
-run = "go test ./..."
+run = "go test ./pkg/sweet/..."
 
 [tasks."release:check"]
 description = "Validate the GoReleaser configuration"
@@ -30,4 +30,4 @@ run = "goreleaser release --snapshot --clean"
 
 [tasks.check]
 description = "Run Go tests and static checks"
-run = ["go test ./...", "go vet ./..."]
+run = ["go test ./pkg/sweet/...", "go vet ./pkg/sweet/..."]

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/chattocorp/sweet-release/pkg/core"
+	"github.com/chattocorp/sweet-release/pkg/sweet/core"
 	"github.com/spf13/cobra"
 )
 

@@ -49,3 +49,8 @@ for a root package). CLI releases then publish Linux, macOS, and Windows binarie
 with checksums on the repository's [Releases page](https://github.com/chattocorp/sweet-release/releases).
 
 See [AGENTS.md](AGENTS.md) for development instructions and detailed behavior.
+
+Sweet Release itself is one package in `pkg/sweet`, with Go module
+`github.com/chattocorp/sweet-release/pkg/sweet` and release tags
+`pkg/sweet/v<version>`. Core imports now use the module's `/core` subpackage.
+Existing `pkg/cli/v` releases remain available on the Releases page.

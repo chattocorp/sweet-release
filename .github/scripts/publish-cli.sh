@@ -4,11 +4,15 @@ set -euo pipefail
 tag=$1
 config=$2
 metadata=${SWEET_METADATA:?Set SWEET_METADATA to the current sweet binary}
-[[ "$tag" == pkg/cli/v* ]]
-version=${tag#pkg/cli/v}
+case "$tag" in
+  pkg/sweet/v*) package=pkg/sweet ;;
+  pkg/cli/v*) package=pkg/cli ;;
+  *) echo "Unsupported release tag: $tag" >&2; exit 1 ;;
+esac
+version=${tag#"$package/v"}
 [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse --verify "refs/tags/$tag^{commit}")" ]]
-name=$("$metadata" status --json | jq -er '.[] | select(.path == "pkg/cli") | if (.name // "") == "" then .path else .name end')
+name=$("$metadata" status --json | jq -er --arg package "$package" '.[] | select(.path == $package) | if (.name // "") == "" then .path else .name end')
 
 # Listing fails on API/auth errors rather than treating them as a missing release.
 releases=$(gh api --paginate 'repos/{owner}/{repo}/releases?per_page=100' --jq '.[] | {tag_name, draft}')
@@ -20,14 +24,18 @@ fi
 
 export SWEET_RELEASE_VERSION="$version"
 export GORELEASER_CURRENT_TAG="v$version"
-goreleaser release --snapshot --clean --config "$config"
+# GoReleaser does not expand templates in builds.dir. Adapt the retained
+# configuration outside the checkout when publishing the historical CLI layout.
+temporary=$(mktemp -d)
+trap 'rm -rf "$temporary"' EXIT
+awk -v directory="$package" '{ if ($0 == "    dir: pkg/sweet") $0 = "    dir: " directory; print }' "$config" > "$temporary/goreleaser.yml"
+goreleaser release --snapshot --clean --config "$temporary/goreleaser.yml"
 
 # Verify the actual binary, including the linker-supplied version.
 [[ "$(dist/sweet_linux_amd64_v1/sweet --version)" == "sweet $version" ]]
 (cd dist && sha256sum --check checksums.txt)
-notes=$(mktemp)
-trap 'rm -f "$notes"' EXIT
-"$metadata" release-notes pkg/cli/CHANGELOG.md --version "$version" > "$notes"
+notes="$temporary/notes.md"
+"$metadata" release-notes "$package/CHANGELOG.md" --version "$version" > "$notes"
 
 prerelease=false
 [[ "${version%%+*}" != *-* ]] || prerelease=true
