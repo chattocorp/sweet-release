@@ -3,31 +3,21 @@ data:
   labels:
     - configuration
     - changes
-  status: in_progress
+  status: done
   type: feature
 id: cqnj7
 title: Configure repository-wide change types and defaults
 ---
-## Context
-
-The repository root provides shared configuration in `.sweet.config.yml`.
-
-## Acceptance criteria
-
-- Load repository-wide configuration from the agreed filename.
-- Define supported change types and their version effects.
-- Apply shared defaults consistently across discovered packages.
-- Report invalid configuration and unknown change types clearly.
-
 ## Implemented
 
-- `sweet init repo` writes a `types` list with fix, feature, chore, refactor, and performance.
-- `sweet change` loads types from the target package's Git repository root and offers an fzf type picker after package selection. `--type` bypasses the type picker for scripted use.
-- New notes contain YAML frontmatter with the selected `type`. With `--stdin`, input is preserved as the Markdown body below the generated frontmatter.
-- Missing configuration or an omitted types field uses built-in defaults. Empty lists, duplicates, invalid names, and unknown selections are rejected.
-- The repository configuration now uses these defaults for dogfooding.
-- Verified with Go tests, vet, build, and a real terminal flow through both fzf menus with piped input.
+Repository configuration uses a `types` mapping in `.sweet.config.yml`. Each type has `bump` (major, minor, patch, or none; omitted means none) and `section` (a changelog heading; empty, null, or omitted excludes that type from the changelog). These settings are independent.
 
-## Remaining decisions
+Initialization defaults: fix uses minor / Fixes, matching the requested example; feature uses minor / Features; performance uses patch / Performance; chore and refactor use none and empty sections.
 
-Version effects for change types remain undefined. Configurable changelog headings, package overrides, and merge rules are also undecided.
+The core loads ordered type policies from the target package's repository. The CLI uses their names in the fzf picker and validates `--type`. Missing configuration or an omitted types field uses built-in defaults. The former list format, empty mappings, duplicates, invalid names, unknown settings, and invalid field values produce errors with configuration file context.
+
+Changeset frontmatter records only the selected type; repository configuration defines its release policy. Tests cover policy parsing, independent bump and section settings, custom configuration, defaults, and invalid input. Go tests, vet, and build pass.
+
+## Follow-up scope
+
+Release calculation and changelog generation will consume these policies in later work. Package-level overrides and merge rules remain undecided. See zf5f4 for remaining versioning decisions.

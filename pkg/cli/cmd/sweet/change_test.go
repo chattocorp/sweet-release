@@ -119,7 +119,7 @@ func TestChangeEditor(t *testing.T) {
 	}
 	t.Setenv("EDITOR", "sh '"+script+"' --wait")
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"change", dir, "--type", "fix"}, &stdout, &stderr); code != 0 {
+	if code := runChangeWithDescription([]string{dir, "--type", "fix"}, &stdout, &stderr, ""); code != 0 {
 		t.Fatalf("exit = %d, stderr = %s", code, &stderr)
 	}
 	files, _ := filepath.Glob(filepath.Join(dir, ".sweet", "*.md"))
@@ -132,7 +132,7 @@ func TestChangeEditor(t *testing.T) {
 	}
 
 	t.Setenv("EDITOR", "exit 7")
-	if code := run([]string{"change", dir, "--type", "fix"}, &stdout, &stderr); code == 0 || !strings.Contains(stderr.String(), "release note kept at") {
+	if code := runChangeWithDescription([]string{dir, "--type", "fix"}, &stdout, &stderr, ""); code == 0 || !strings.Contains(stderr.String(), "release note kept at") {
 		t.Fatalf("editor failure: %d, %s", code, &stderr)
 	}
 	files, _ = filepath.Glob(filepath.Join(dir, ".sweet", "*.md"))
@@ -148,7 +148,7 @@ func TestChangeWithoutEditor(t *testing.T) {
 	}
 	t.Setenv("EDITOR", "")
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"change", dir, "--type", "fix"}, &stdout, &stderr); code == 0 || !strings.Contains(stderr.String(), "set EDITOR") {
+	if code := runChangeWithDescription([]string{dir, "--type", "fix"}, &stdout, &stderr, " "); code == 0 || !strings.Contains(stderr.String(), "set EDITOR") {
 		t.Fatalf("exit = %d, stderr = %s", code, &stderr)
 	}
 	files, _ := os.ReadDir(filepath.Join(dir, ".sweet"))

@@ -1,7 +1,15 @@
 # Sweet repository configuration
 types:
-  - fix
-  - feature
-  - chore
-  - refactor
-  - performance
+  fix:
+    bump: minor
+    section: Fixes
+  feature:
+    bump: minor
+    section: Features
+  chore:
+    bump: none
+  refactor:
+    bump: none
+  performance:
+    bump: patch
+    section: Performance

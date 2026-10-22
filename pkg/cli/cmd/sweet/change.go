@@ -14,12 +14,16 @@ import (
 )
 
 func newChangeCommand() *cobra.Command {
+	return newChangeCommandWithPrompt(promptDescription)
+}
+
+func newChangeCommandWithPrompt(prompt func(*cobra.Command) (string, error)) *cobra.Command {
 	var stdin bool
 	var changeType string
 	cmd := &cobra.Command{
 		Use:   "change [package]",
 		Short: "Create a release note in a package directory",
-		Long:  "Create a release note in a package directory (the current directory by default).\nOpen it with $EDITOR, or use --stdin to read Markdown from standard input.",
+		Long:  "Create a release note in a package directory (the current directory by default).\nEnter a one-line description, leave it empty to open $EDITOR, or use --stdin to read Markdown.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := "."
@@ -45,17 +49,17 @@ func newChangeCommand() *cobra.Command {
 			} else if err != nil {
 				return fmt.Errorf("check package %s: %w", dir, err)
 			}
-			editor := os.Getenv("EDITOR")
-			if !stdin && strings.TrimSpace(editor) == "" {
-				return fmt.Errorf("set EDITOR or use --stdin to supply a release note")
-			}
-			types, err := core.ChangeTypes(dir)
+			policies, err := core.LoadChangeTypes(dir)
 			if err != nil {
 				return err
 			}
+			types := make([]string, len(policies))
+			for i, policy := range policies {
+				types[i] = policy.Name
+			}
 			selectedType := changeType
 			if selectedType == "" {
-				selectedType, err = selectChangeType(cmd, types)
+				selectedType, err = selectChangeType(cmd, policies)
 				if err != nil {
 					return err
 				}
@@ -64,14 +68,30 @@ func newChangeCommand() *cobra.Command {
 				return fmt.Errorf("unknown change type %q; available types: %s", selectedType, strings.Join(types, ", "))
 			}
 			var content io.Reader = strings.NewReader("")
+			useEditor := false
+			editor := os.Getenv("EDITOR")
 			if stdin {
 				content = cmd.InOrStdin()
+			} else {
+				description, err := prompt(cmd)
+				if err != nil {
+					return err
+				}
+				description = strings.TrimSpace(description)
+				useEditor = description == ""
+				if useEditor {
+					if strings.TrimSpace(editor) == "" {
+						return fmt.Errorf("empty description: set EDITOR to open an editor, or enter a description")
+					}
+				} else {
+					content = strings.NewReader(description + "\n")
+				}
 			}
 			path, err := core.CreateChange(dir, selectedType, content)
 			if err != nil {
 				return err
 			}
-			if !stdin {
+			if useEditor {
 				// Interpret EDITOR as a shell command (for example, code --wait).
 				// Pass the filename separately so paths cannot become shell syntax.
 				process := exec.Command("sh", "-c", editor+` "$@"`, "sweet-editor", path)
@@ -86,7 +106,7 @@ func newChangeCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&stdin, "stdin", false, "Read the Markdown body from standard input instead of opening EDITOR")
+	cmd.Flags().BoolVar(&stdin, "stdin", false, "Read the Markdown body from standard input instead of prompting")
 	cmd.Flags().StringVar(&changeType, "type", "", "Change type (opens a type picker when omitted)")
 	return cmd
 }

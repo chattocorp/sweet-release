@@ -1,27 +1,30 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/chattocorp/sweet-release/pkg/core"
+	"github.com/sahilm/fuzzy"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
+func pickerAvailable(cmd *cobra.Command) bool {
+	terminal, ok := cmd.ErrOrStderr().(*os.File)
+	return ok && term.IsTerminal(int(terminal.Fd()))
+}
+
 // selectChangePackage returns an empty path when interactive selection is unavailable.
 func selectChangePackage(cmd *cobra.Command) (string, error) {
-	terminal, ok := cmd.ErrOrStderr().(*os.File)
-	if !ok || !term.IsTerminal(int(terminal.Fd())) {
-		return "", nil
-	}
-	fzf, err := exec.LookPath("fzf")
-	if err != nil {
+	if !pickerAvailable(cmd) {
 		return "", nil
 	}
 	root, err := core.RepositoryRoot()
@@ -35,51 +38,150 @@ func selectChangePackage(cmd *cobra.Command) (string, error) {
 	if len(packages) == 0 {
 		return "", nil
 	}
-	return pickPackage(fzf, root, packages, terminal)
-}
-
-func pickPackage(fzf, root string, packages []core.Package, terminal io.Writer) (string, error) {
 	paths := make([]string, len(packages))
 	for i, pkg := range packages {
 		paths[i] = pkg.Path
 	}
-	selected, err := pickOption(fzf, "package", paths, terminal)
+	selected, err := pickOption(cmd, "package", paths, nil)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(root, selected), nil
 }
 
-func selectChangeType(cmd *cobra.Command, types []string) (string, error) {
-	terminal, ok := cmd.ErrOrStderr().(*os.File)
-	fzf, err := exec.LookPath("fzf")
-	if !ok || !term.IsTerminal(int(terminal.Fd())) || err != nil {
-		return "", fmt.Errorf("choose a change type with --type <type>; available types: %s (interactive selection requires fzf and a terminal)", strings.Join(types, ", "))
+func selectChangeType(cmd *cobra.Command, policies []core.ChangeType) (string, error) {
+	types := make([]string, len(policies))
+	annotations := make(map[string]string, len(policies))
+	for i, policy := range policies {
+		types[i] = policy.Name
+		if policy.Bump != "none" {
+			annotations[policy.Name] = policy.Bump
+		}
 	}
-	return pickOption(fzf, "type", types, terminal)
+	if !pickerAvailable(cmd) {
+		return "", fmt.Errorf("choose a change type with --type <type>; available types: %s (interactive selection requires a terminal)", strings.Join(types, ", "))
+	}
+	return pickOption(cmd, "type", types, annotations)
 }
 
-func pickOption(fzf, kind string, options []string, terminal io.Writer) (string, error) {
-	process := exec.Command(fzf, "--read0", "--print0", "--no-multi", "--height=40%", "--layout=reverse", "--prompt="+kind+"> ", "--header=Choose a "+kind+" for your release note")
-	// fzf reads candidate paths from this pipe and keyboard input from the terminal.
-	// Release-note stdin is left untouched until a package has been chosen.
-	process.Stdin = strings.NewReader(strings.Join(options, "\x00") + "\x00")
-	process.Stderr = terminal
-	// Global filter, multi-select, or output options must not change this protocol.
-	process.Env = append(os.Environ(), "FZF_DEFAULT_OPTS=", "FZF_DEFAULT_OPTS_FILE=")
-	output, err := process.Output()
+func pickOption(cmd *cobra.Command, kind string, options []string, annotations map[string]string) (string, error) {
+	var input io.Reader = cmd.InOrStdin()
+	file, ok := input.(*os.File)
+	if !ok || !term.IsTerminal(int(file.Fd())) {
+		// Keep piped release-note input untouched while the user picks options.
+		device := "/dev/tty"
+		if runtime.GOOS == "windows" {
+			device = "CONIN$"
+		}
+		terminal, err := os.Open(device)
+		if err != nil {
+			return "", fmt.Errorf("open terminal for %s selection: %w", kind, err)
+		}
+		defer terminal.Close()
+		input = terminal
+	}
+	initial := newPickerModel(kind, options)
+	initial.annotations = annotations
+	model, err := tea.NewProgram(initial, tea.WithInput(input), tea.WithOutput(cmd.ErrOrStderr())).Run()
 	if err != nil {
-		var exit *exec.ExitError
-		if errors.As(err, &exit) && (exit.ExitCode() == 130 || exit.ExitCode() == 1) {
-			return "", fmt.Errorf("%s selection cancelled", kind)
-		}
-		return "", fmt.Errorf("select %s with fzf: %w", kind, err)
+		return "", fmt.Errorf("select %s: %w", kind, err)
 	}
-	selected := strings.TrimSuffix(string(output), "\x00")
-	for _, option := range options {
-		if selected == option {
-			return option, nil
+	picker := model.(pickerModel)
+	if !picker.accepted {
+		return "", fmt.Errorf("%s selection cancelled", kind)
+	}
+	return picker.matches[picker.cursor], nil
+}
+
+type pickerModel struct {
+	kind        string
+	input       textinput.Model
+	options     []string
+	annotations map[string]string
+	matches     []string
+	cursor      int
+	height      int
+	width       int
+	accepted    bool
+	cancelled   bool
+}
+
+func newPickerModel(kind string, options []string) pickerModel {
+	input := textinput.New()
+	input.Prompt = "⌕ "
+	input.Placeholder = "Type to filter"
+	input.Focus()
+	return pickerModel{kind: kind, input: input, options: options, matches: options, height: 10, width: 80}
+}
+
+func (m pickerModel) Init() tea.Cmd { return textinput.Blink }
+
+func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = max(10, msg.Width-2)
+		m.height = max(1, min(10, msg.Height-6))
+		m.input.Width = max(1, m.width-2)
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc", "ctrl+c":
+			m.cancelled = true
+			return m, tea.Quit
+		case "enter":
+			if len(m.matches) > 0 {
+				m.accepted = true
+				return m, tea.Quit
+			}
+			return m, nil
+		case "up", "ctrl+p":
+			m.cursor = max(0, m.cursor-1)
+			return m, nil
+		case "down", "ctrl+n":
+			m.cursor = min(max(0, len(m.matches)-1), m.cursor+1)
+			return m, nil
 		}
 	}
-	return "", fmt.Errorf("fzf did not return an available %s", kind)
+	before := m.input.Value()
+	var command tea.Cmd
+	m.input, command = m.input.Update(msg)
+	if m.input.Value() != before {
+		m.cursor = 0
+		m.matches = m.options
+		if query := m.input.Value(); query != "" {
+			m.matches = nil
+			for _, match := range fuzzy.Find(query, m.options) {
+				m.matches = append(m.matches, m.options[match.Index])
+			}
+		}
+	}
+	return m, command
+}
+
+func (m pickerModel) View() string {
+	if m.accepted || m.cancelled {
+		return ""
+	}
+	var view strings.Builder
+	view.WriteString(lipgloss.NewStyle().Bold(true).Render("Choose a "+m.kind) + "\n")
+	view.WriteString(m.input.View() + "\n\n")
+	start := max(0, m.cursor-m.height+1)
+	for i := start; i < min(len(m.matches), start+m.height); i++ {
+		prefix := "  "
+		style := lipgloss.NewStyle()
+		if i == m.cursor {
+			prefix = "❯ "
+			style = style.Bold(true).Foreground(lipgloss.Color("6"))
+		}
+		row := style.Render(prefix + m.matches[i])
+		if annotation := m.annotations[m.matches[i]]; annotation != "" {
+			muted := lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "245", Dark: "242"})
+			row += muted.Render(" [" + annotation + "]")
+		}
+		view.WriteString(lipgloss.NewStyle().MaxWidth(m.width).Render(row) + "\n")
+	}
+	if len(m.matches) == 0 {
+		view.WriteString("No matching options\n")
+	}
+	fmt.Fprintf(&view, "\n%d/%d · ↑/↓ move · Enter select · Esc cancel", len(m.matches), len(m.options))
+	return view.String()
 }

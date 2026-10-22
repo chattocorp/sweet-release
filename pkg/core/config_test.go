@@ -17,7 +17,8 @@ func TestChangeTypeConfiguration(t *testing.T) {
 	}
 	for _, data := range []string{defaultRepositoryConfig, "{}"} {
 		types, err := parseChangeTypes([]byte(data))
-		if err != nil || !reflect.DeepEqual(types, []string{"fix", "feature", "chore", "refactor", "performance"}) {
+		want := []ChangeType{{"fix", "minor", "Fixes"}, {"feature", "minor", "Features"}, {"chore", "none", ""}, {"refactor", "none", ""}, {"performance", "patch", "Performance"}}
+		if err != nil || !reflect.DeepEqual(types, want) {
 			t.Fatalf("types = %v, error = %v", types, err)
 		}
 	}
@@ -32,7 +33,7 @@ func TestRepositoryChangeTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := filepath.Join(root, ".sweet.config.yml")
-	if err := os.WriteFile(config, []byte("types:\n  - security\n  - docs\n"), 0o644); err != nil {
+	if err := os.WriteFile(config, []byte("types:\n  security:\n    bump: patch\n    section: Security\n  docs:\n    bump: none\n    section: Documentation\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	dir := filepath.Join(root, "nested", "package")
@@ -68,5 +69,37 @@ func TestRepositoryChangeTypes(t *testing.T) {
 	}
 	if _, err := ChangeTypes(dir); err == nil || !strings.Contains(err.Error(), config) {
 		t.Fatalf("missing configuration path: %v", err)
+	}
+}
+
+func TestChangeTypePolicies(t *testing.T) {
+	types, err := parseChangeTypes([]byte(`types:
+  breaking:
+    bump: major
+    section: Breaking changes
+  internal:
+    bump: patch
+    section:
+  docs:
+    section: Documentation
+  hidden: {}
+`))
+	want := []ChangeType{{"breaking", "major", "Breaking changes"}, {"internal", "patch", ""}, {"docs", "none", "Documentation"}, {"hidden", "none", ""}}
+	if err != nil || !reflect.DeepEqual(types, want) {
+		t.Fatalf("policies = %v, error = %v", types, err)
+	}
+	for _, policy := range []string{
+		"types: {}", "types: {fix: null}", "types: {fix: patch}",
+		"types: {fix: {bump: invalid}}", "types: {fix: {bump: 1}}",
+		"types: {fix: {bump: null}}", "types: {fix: {bump: ''}}",
+		"types: {fix: {section: true}}", "types: {fix: {section: []}}",
+		"types: {fix: {section: \"one\\ntwo\"}}",
+		"types: {fix: {bump: patch, bump: minor}}",
+		"types: {fix: {sections: Fixes}}", "types: {fix: {}, fix: {}}",
+		"types: {Fix: {}}", "types: {1: {}}",
+	} {
+		if _, err := parseChangeTypes([]byte(policy)); err == nil {
+			t.Errorf("accepted %s", policy)
+		}
 	}
 }

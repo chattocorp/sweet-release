@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,28 +32,6 @@ func TestChangeTypeRequired(t *testing.T) {
 		files, _ := os.ReadDir(filepath.Join(dir, ".sweet"))
 		if len(files) != 0 {
 			t.Fatal("created a note without a valid type")
-		}
-	}
-}
-
-func TestTypePicker(t *testing.T) {
-	for _, cancel := range []bool{false, true} {
-		dir := t.TempDir()
-		fzf := filepath.Join(dir, "fzf")
-		script := "#!/bin/sh\ncat > /dev/null\nprintf 'security\\0'\n"
-		if cancel {
-			script = "#!/bin/sh\nexit 130\n"
-		}
-		if err := os.WriteFile(fzf, []byte(script), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		got, err := pickOption(fzf, "type", []string{"security", "docs"}, io.Discard)
-		if cancel {
-			if err == nil || !strings.Contains(err.Error(), "type selection cancelled") {
-				t.Fatalf("error = %v", err)
-			}
-		} else if err != nil || got != "security" {
-			t.Fatalf("type = %q, error = %v", got, err)
 		}
 	}
 }

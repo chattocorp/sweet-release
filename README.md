@@ -88,32 +88,52 @@ Package names are not required. Dependency metadata is not yet implemented.
 
 ```yaml
 types:
-  - fix
-  - feature
-  - chore
-  - refactor
-  - performance
+  fix:
+    bump: minor
+    section: Fixes
+  feature:
+    bump: minor
+    section: Features
+  chore:
+    bump: none
+  refactor:
+    bump: none
+  performance:
+    bump: patch
+    section: Performance
 ```
 
-Edit this list to configure the available change types, in picker order, for all
+Edit this mapping to configure the available change types, in picker order, for all
 packages in the repository. Names must start with a lowercase letter and contain
-only lowercase letters, digits, and hyphens. The list must be non-empty and unique.
+only lowercase letters, digits, and hyphens. The mapping must be non-empty with unique names.
 Missing configuration or an omitted `types` field uses the built-in defaults.
-Version effects for these types are not yet defined.
+The old list format is no longer accepted.
+
+Each type supports two settings:
+
+- `bump`: `major`, `minor`, `patch`, or `none`. Omitting it means `none`.
+- `section`: the changelog heading. An empty, null, or omitted section excludes
+  this type from the changelog. It does not change the type's version bump.
+
+For example, a type can trigger a patch without appearing in a changelog, or
+appear under a heading without triggering a bump. Unknown settings and invalid
+values produce configuration errors. These policies are loaded and validated;
+release calculation and changelog generation are not yet implemented.
 
 ## Write release notes
 
 Run `sweet change [package]` with a package directory, or omit the argument to use
 the current directory. The package must already contain a valid `.sweet.yml`.
-If the current directory is not a package, Sweet opens an `fzf` package picker
-when `fzf` is installed and standard error is a terminal. Type to filter, press
+If the current directory is not a package, Sweet opens a built-in Charm package picker
+when standard error is a terminal. Type to fuzzy-filter, use the arrow keys, press
 Enter to select, or Esc to cancel without creating a note. Without an interactive
 picker, Sweet lists commands for the available packages. An explicit package
 argument bypasses the picker. The picker also works with `--stdin`; it leaves
 the piped Markdown untouched.
-Next, Sweet opens an `fzf` type picker using the repository's configured types.
-Pass `--type <type>` to skip this picker; this flag is required without `fzf` or
-an interactive terminal. Cancelling either picker creates no file.
+Next, Sweet opens the same searchable picker with the repository's configured types.
+Pass `--type <type>` to skip this picker; this flag is required without an
+interactive terminal. Cancelling either picker creates no file. No external
+picker program is required.
 
 The command creates `.sweet/<three-word-id>.md` with YAML frontmatter such as:
 
@@ -124,17 +144,20 @@ type: fix
 
 ```
 
-It then opens the file with `$EDITOR`. Editor commands can include arguments, such as `code --wait`; they
-are run through `sh`. Sweet waits for the editor to exit and keeps the file if
-the editor fails.
+After type selection, a Charm prompt asks for a one-line description. Submit a
+description to save it as the Markdown body, or leave it empty to open `$EDITOR`
+with the generated frontmatter. Cancelling the prompt creates no file. An editor
+is only required for an empty description. Editor commands can include arguments,
+such as `code --wait`; they run through `sh`. Sweet waits for the editor to exit
+and keeps the file if the editor fails.
 
 ```sh
-EDITOR='code --wait' sweet change pkg/core
+sweet change pkg/core
 printf 'Add package discovery.\n' | sweet change pkg/cli --type feature --stdin
 ```
 
 `--stdin` writes input verbatim as the Markdown body below the generated frontmatter
-and does not start an editor. Supply body text, not a complete frontmatter document.
+and skips the description prompt and editor. Supply body text, not a complete frontmatter document.
 Existing notes are
 never overwritten. The command creates `.sweet/` if the package does not yet
 have it. Release calculation is not yet implemented.
