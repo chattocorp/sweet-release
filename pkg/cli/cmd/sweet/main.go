@@ -45,7 +45,6 @@ func newRootCommand() *cobra.Command {
 	cmd.AddCommand(newInitCommand())
 	cmd.AddCommand(newStatusCommand())
 	cmd.AddCommand(newBumpCommand())
-	cmd.AddCommand(newReleasePlanCommand())
 	cmd.AddCommand(change)
 	return cmd
 }

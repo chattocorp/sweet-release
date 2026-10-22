@@ -2,132 +2,32 @@ name: Release
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      commit:
-        description: 'Main-line commit that introduced the CLI version (full SHA)'
-        required: true
-        type: string
+    tags:
+      - 'v*'
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  plan:
-    if: github.ref == 'refs/heads/main'
+  release:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    outputs:
-      releases: ${{ steps.plan.outputs.releases }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
-          go-version-file: pkg/cli/go.mod
+          go-version-file: packages/cli/go.mod
           cache-dependency-path: |
-            pkg/cli/go.sum
-            pkg/core/go.sum
-      - name: Plan committed CLI releases
-        id: plan
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BEFORE_SHA: ${{ github.event.before }}
-          PUSH_SHA: ${{ github.sha }}
-          RETRY_SHA: ${{ inputs.commit }}
-        run: |
-          if [ "$EVENT_NAME" = workflow_dispatch ]; then
-            if ! [[ "$RETRY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-              echo 'Retry requires a full commit SHA.' >&2
-              exit 1
-            fi
-            git rev-list --first-parent "$PUSH_SHA" > "$RUNNER_TEMP/main-commits"
-            if ! grep -Fxq "$RETRY_SHA" "$RUNNER_TEMP/main-commits"; then
-              echo 'Retry commit must be on the first-parent history of main.' >&2
-              exit 1
-            fi
-            release_from="$RETRY_SHA^"
-            release_to="$RETRY_SHA"
-          else
-            if [[ "$BEFORE_SHA" =~ ^0+$ ]]; then
-              echo 'releases=[]' >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            release_from="$BEFORE_SHA"
-            release_to="$PUSH_SHA"
-          fi
-          go run ./pkg/cli/cmd/sweet release-plan pkg/cli \
-            --from "$release_from" --to "$release_to" --tag-prefix v \
-            > "$RUNNER_TEMP/releases.json"
-          printf 'releases=%s\n' "$(jq -c . "$RUNNER_TEMP/releases.json")" >> "$GITHUB_OUTPUT"
-
-  publish:
-    needs: plan
-    if: needs.plan.outputs.releases != '[]'
-    strategy:
-      fail-fast: false
-      matrix:
-        release: ${{ fromJSON(needs.plan.outputs.releases) }}
-    # Only duplicate attempts for the same version share a concurrency group.
-    concurrency:
-      group: release-${{ matrix.release.tag }}
-      cancel-in-progress: false
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: write
-    env:
-      RELEASE_COMMIT: ${{ matrix.release.commit }}
-      RELEASE_VERSION: ${{ matrix.release.version }}
-      RELEASE_TAG: ${{ matrix.release.tag }}
-      AUTOMATION_COMMIT: ${{ github.sha }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ matrix.release.commit }}
-          fetch-depth: 0
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: pkg/cli/go.mod
-          cache-dependency-path: |
-            pkg/cli/go.sum
-            pkg/core/go.sum
-      - name: Verify the release commit
-        run: |
-          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
-          test -z "$(gofmt -l pkg)"
-          go test -race ./pkg/cli/... ./pkg/core/...
-          go vet ./pkg/cli/... ./pkg/core/...
-          test "$(go run ./pkg/cli/cmd/sweet --version)" = "sweet $RELEASE_VERSION"
-      - name: Load release tooling from the workflow commit
-        run: |
-          git show "$AUTOMATION_COMMIT:.github/scripts/prepare-release.cjs" > "$RUNNER_TEMP/prepare-release.cjs"
-          git show "$AUTOMATION_COMMIT:.goreleaser.yml" > "$RUNNER_TEMP/goreleaser.yml"
-      - name: Create or verify the tag and check publication state
-        id: prepare
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const prepare = require(process.env.RUNNER_TEMP + '/prepare-release.cjs');
-            const published = await prepare({github, ...context.repo,
-              tag: process.env.RELEASE_TAG, commit: process.env.RELEASE_COMMIT});
-            core.setOutput('published', String(published));
-      - name: Fetch the release tag and write release notes
-        if: steps.prepare.outputs.published != 'true'
-        env:
-          RELEASE_NOTES: ${{ matrix.release.notes }}
-        run: |
-          git fetch origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
-          test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$RELEASE_COMMIT"
-          printf '%s\n' "$RELEASE_NOTES" > "$RUNNER_TEMP/release-notes.md"
-      - name: Build and publish CLI binaries
-        if: steps.prepare.outputs.published != 'true'
-        uses: goreleaser/goreleaser-action@v7
+            packages/cli/go.sum
+            packages/core/go.sum
+      - uses: goreleaser/goreleaser-action@v7
         with:
           version: v2.18.2
-          args: release --clean --config=${{ runner.temp }}/goreleaser.yml --release-notes=${{ runner.temp }}/release-notes.md
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ matrix.release.tag }}

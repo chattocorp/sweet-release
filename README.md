@@ -6,7 +6,6 @@
 - Preview pending releases with `sweet status`.
 - Update package versions and generate changelogs with `sweet bump`.
 - Copy bumped versions into JSON, YAML, TOML, and plaintext files.
-- Inspect committed releases as JSON with `sweet release-plan`.
 - Use interactive pickers or explicit arguments and piped input.
 
 ## How it works
@@ -30,5 +29,9 @@ semantic version. Running `sweet` without a command starts the change workflow.
 then removes the consumed change files. It changes local files only: committing,
 tagging, and publishing are separate steps. Dependency propagation is not yet
 supported.
+
+This repository's [Release PR workflow](.github/workflows/release-pr.yml) runs
+`sweet bump --all` and keeps one preparation PR up to date as notes reach `main`.
+Merging that PR does not tag or publish packages.
 
 See [AGENTS.md](AGENTS.md) for development instructions and detailed behavior.

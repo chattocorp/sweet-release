@@ -45,10 +45,44 @@ formatting is correct) and `go test -race ./pkg/cli/... ./pkg/core/...`.
 
 ## Releases
 
-The release workflow publishes CLI binaries when the CLI package version
-increases on `main`. Prepare a release with `sweet bump pkg/cli`, review and
-commit the resulting files, then merge them into `main`. Merging the version
-change authorizes publication. The workflow does not bump or commit files.
+### Release PRs
+
+The `Release PR` workflow runs on pushes to `main` or manual dispatch on `main`.
+It checks out current `main`, runs `sweet bump --all`, verifies the changed tree,
+and uses `peter-evans/create-pull-request` to create or update one PR from
+`sweet/release` into `main`. All packages with pending bumps are included.
+The PR contains updated manifests, changelogs, configured version files, and
+deletions of consumed notes. Notes with no version effect alone do not create a PR.
+
+Each run regenerates the changes from `main`; it does not bump the previous
+release branch again. Make corrections through `main`, since edits to the
+generated branch can be overwritten. When there is no diff, the action creates
+no PR and closes an obsolete open PR. It also removes an unused release branch.
+After a release PR is merged, the next run either cleans up its branch or
+prepares the next pending release. Merging the PR does not tag or publish.
+
+One concurrency group serializes writers without cancelling an active update.
+A bump or verification failure stops before the PR action and leaves any
+existing PR unchanged. If GitHub fails after the branch is pushed, rerun the
+workflow to reconcile the PR. A subsequent run always starts from current main.
+
+The workflow uses `GITHUB_TOKEN` with `contents: write` and `pull-requests: write`.
+Enable **Allow GitHub Actions to create and approve pull requests** under
+Settings → Actions → General → Workflow permissions (organization policy must
+also allow it). According to [GitHub's workflow trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow),
+PR workflows created by this token require a maintainer to approve their runs.
+Use a GitHub App token in the PR action if unattended PR checks are needed.
+
+This workflow dogfoods the CLI from source. Other projects can use the same
+pattern with an installed `sweet` binary. Add project-specific commands, such
+as `pnpm install`, between the bump and verification/PR steps to include lockfile
+updates. No release-plan command, Git history scan, or publishing task is needed.
+
+### Existing CLI publishing
+
+The release workflow and `.goreleaser.yml` still reference the old `packages/`
+directory. These paths must be changed to `pkg/` before snapshot builds or
+publishing can succeed. The following describes the intended release workflow.
 
 Install the tools with `mise install`, then run these commands from the root:
 
@@ -66,57 +100,23 @@ Local builds default to `cli.Version` in `pkg/cli/version.go`. The CLI package's
 The existing `-X main.version=...` linker option overrides the displayed version
 for release and snapshot builds.
 
-The read-only `release-plan` command lists committed releases as a JSON array:
+To publish a CLI release, update `pkg/cli/.sweet.yml` to the intended
+version and commit it with the release changes. Once that commit and the release
+workflow are on GitHub, tag the commit and push the tag. For example:
 
 ```sh
-sweet release-plan pkg/cli --from HEAD^ --to HEAD --tag-prefix v
+git tag -a v0.1.0 -m "Release sweet v0.1.0"
+git push origin v0.1.0
 ```
 
-Paths are relative to the current directory. Defaults are `--from HEAD^`,
-`--to HEAD`, and `--tag-prefix v`. The range excludes the base and includes the
-end commit; the base must be on the end commit's first-parent history. Each
-entry contains `package`, `previous_version`, `version`, `commit`, `tag`, and
-`notes`. Empty plans produce `[]`. Uncommitted files are ignored.
-
-The planner reads each commit in the range. For merge commits it compares the
-first parent, so the merge commit is the release source. Adding or removing a
-package alone is not a release. Downgrades and build-metadata-only changes are
-rejected. Each version increase needs exactly one matching `## <version>` entry
-in that commit's package `CHANGELOG.md`. Notes come from that entry; fenced code
-and ordinary subheadings are preserved. Unknown package paths, malformed
-manifests, or missing release entries fail planning before publishing starts.
-
-On a push to `main`, CI plans the complete pushed range for `pkg/cli`, then runs
-one publishing job per version increase. An initial branch creation is skipped.
-Each job checks out the exact release commit, runs formatting, race tests and vet,
-and verifies that the CLI reports the planned version. It creates a lightweight
-`v<version>` tag or verifies that an existing tag resolves to the same commit.
-It never moves a tag. Jobs for the same tag are serialized; different versions
-can run independently without replacing each other's pending jobs.
-
-GoReleaser runs directly in that job using `GITHUB_TOKEN`; the workflow does not
-depend on tag pushes triggering another workflow. It builds the archives and
-checksums and uses the package's prepared changelog entry as GitHub Release notes.
-Prerelease versions create prereleases. GitHub chooses the latest release using
-its legacy chronology/SemVer behavior, rather than marking every retry latest.
-
-A tag or draft release is not proof of completion. Reruns reuse a matching tag
-and resume a draft, replacing incomplete uploads. A matching published release
-is skipped. Permission and API failures stop the job. To retry, rerun the failed
-workflow or dispatch the `Release` workflow on `main` with the full SHA of the
-main-line commit that introduced the version. A commit found only on a merged
-feature branch is not accepted for manual dispatch. Retry tooling and GoReleaser
-configuration come from the workflow commit, while source files and release
-notes remain pinned to the original release commit.
-
-Release coordination tests use mocked GitHub API responses and run with
-`node --test .github/scripts/*.test.cjs`. Do not publish a release as a test.
+The release workflow uses GoReleaser to run checks, build the archives, and
+publish a GitHub Release with checksums and a generated changelog. It uses the
+repository's built-in `GITHUB_TOKEN`. Tags such as `v0.1.0-rc.1` create prereleases.
 
 These `v*` tags version the CLI binaries. They do not publish the nested Go
 modules or change package manifests automatically. Go module releases need
-path-prefixed tags, such as `pkg/core/v0.1.0`. Tag pushes alone do not trigger
-this workflow. Automatic release-PR creation and dependency propagation are
-not implemented.
+path-prefixed tags, such as `pkg/core/v0.1.0`, which do not trigger this
+workflow.
 
 ## Package configuration
 

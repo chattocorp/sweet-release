@@ -1,0 +1,57 @@
+name: Release PR
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# One writer owns the release branch. A queued run starts from current main.
+concurrency:
+  group: release-pr-main
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: pkg/cli/go.mod
+          cache-dependency-path: |
+            pkg/cli/go.sum
+            pkg/core/go.sum
+      - name: Prepare pending releases
+        run: go run ./pkg/cli/cmd/sweet bump --all
+      # Project-specific steps, such as regenerating lockfiles, belong here.
+      - name: Verify prepared changes
+        run: |
+          git diff --check
+          test -z "$(gofmt -l pkg)"
+          go test -race ./pkg/cli/... ./pkg/core/...
+          go vet ./pkg/cli/... ./pkg/core/...
+          go build -o "$RUNNER_TEMP/sweet" ./pkg/cli/cmd/sweet
+      - name: Create or update release PR
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: main
+          branch: sweet/release
+          delete-branch: true
+          commit-message: 'chore: prepare releases'
+          title: 'chore: prepare releases'
+          body: |
+            - Prepare all pending package versions, changelogs, and configured version files with `sweet bump --all`.
+            - Consume the included release notes so these changes are ready to release.
+            - Verify formatting, Go race tests, static checks, and the CLI build before opening or updating this PR.
+
+            Merging this PR only commits the prepared files; it does not tag or publish anything.
+            This branch is regenerated from `main`. Make corrections on `main`, not on this branch.
