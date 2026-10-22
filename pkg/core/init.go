@@ -8,12 +8,20 @@ import (
 
 // InitRepository creates repository configuration without overwriting existing files.
 func InitRepository(root string) (string, error) {
-	return createConfig(root, ".sweet.config.yml", "# Sweet repository configuration\n{}\n")
+	return createConfig(root, ".sweet.config.yml", defaultRepositoryConfig)
 }
 
 // InitPackage creates a package manifest without overwriting existing files.
 func InitPackage(dir string) (string, error) {
-	return createConfig(dir, ".sweet.yml", "# Sweet package configuration\nversion: 0.0.0\n")
+	path, err := createConfig(dir, ".sweet.yml", "# Sweet package configuration\nversion: 0.0.0\n")
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".sweet"), 0o755); err != nil {
+		os.Remove(path) // Roll back only the manifest created by this call.
+		return "", fmt.Errorf("create release notes directory: %w", err)
+	}
+	return path, nil
 }
 
 func createConfig(dir, name, content string) (string, error) {

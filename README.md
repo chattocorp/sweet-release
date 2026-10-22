@@ -7,8 +7,8 @@ are implemented; release calculation is still in development.
 
 The repository uses a Go workspace with two modules:
 
-- `packages/cli`: the `sweet` CLI, command output, and command integration tests.
-- `packages/core`: package discovery, manifest parsing, and initialization.
+- `pkg/cli`: the `sweet` CLI, command output, and command integration tests.
+- `pkg/core`: package discovery, manifest parsing, and initialization.
 
 Each module has its own `.sweet.yml` and version. The root holds shared
 `.sweet.config.yml` configuration and `go.work`; it is not a release package.
@@ -18,10 +18,10 @@ module commands resolve core when workspace mode is disabled.
 With the Go version from `mise.toml` installed, run these commands at the root:
 
 ```sh
-go run ./packages/cli/cmd/sweet list
-go test ./packages/cli/... ./packages/core/...
-go vet ./packages/cli/... ./packages/core/...
-go build -o bin/sweet ./packages/cli/cmd/sweet
+go run ./pkg/cli/cmd/sweet list
+go test ./pkg/cli/... ./pkg/core/...
+go vet ./pkg/cli/... ./pkg/core/...
+go build -o bin/sweet ./pkg/cli/cmd/sweet
 ```
 
 The equivalent Mise tasks are `mise run sweet -- list`, `mise run check`, and
@@ -71,7 +71,8 @@ workflow. Prefixed release tags in GoReleaser itself require
 
 Run `sweet init repo` to create repository configuration at the Git root.
 Run `sweet init package [dir]` to create a package manifest in an existing
-directory (the current directory by default). Both commands preserve existing files.
+directory (the current directory by default). Package initialization also creates
+the `.sweet/` directory for release notes. Both commands preserve existing files.
 
 New package manifests start with:
 
@@ -82,3 +83,58 @@ version: 0.0.0
 `sweet list` lists package paths and versions from anywhere in the repository.
 It includes nested packages and respects Git ignore rules for untracked files.
 Package names are not required. Dependency metadata is not yet implemented.
+
+`sweet init repo` starts `.sweet.config.yml` with:
+
+```yaml
+types:
+  - fix
+  - feature
+  - chore
+  - refactor
+  - performance
+```
+
+Edit this list to configure the available change types, in picker order, for all
+packages in the repository. Names must start with a lowercase letter and contain
+only lowercase letters, digits, and hyphens. The list must be non-empty and unique.
+Missing configuration or an omitted `types` field uses the built-in defaults.
+Version effects for these types are not yet defined.
+
+## Write release notes
+
+Run `sweet change [package]` with a package directory, or omit the argument to use
+the current directory. The package must already contain a valid `.sweet.yml`.
+If the current directory is not a package, Sweet opens an `fzf` package picker
+when `fzf` is installed and standard error is a terminal. Type to filter, press
+Enter to select, or Esc to cancel without creating a note. Without an interactive
+picker, Sweet lists commands for the available packages. An explicit package
+argument bypasses the picker. The picker also works with `--stdin`; it leaves
+the piped Markdown untouched.
+Next, Sweet opens an `fzf` type picker using the repository's configured types.
+Pass `--type <type>` to skip this picker; this flag is required without `fzf` or
+an interactive terminal. Cancelling either picker creates no file.
+
+The command creates `.sweet/<three-word-id>.md` with YAML frontmatter such as:
+
+```markdown
+---
+type: fix
+---
+
+```
+
+It then opens the file with `$EDITOR`. Editor commands can include arguments, such as `code --wait`; they
+are run through `sh`. Sweet waits for the editor to exit and keeps the file if
+the editor fails.
+
+```sh
+EDITOR='code --wait' sweet change pkg/core
+printf 'Add package discovery.\n' | sweet change pkg/cli --type feature --stdin
+```
+
+`--stdin` writes input verbatim as the Markdown body below the generated frontmatter
+and does not start an editor. Supply body text, not a complete frontmatter document.
+Existing notes are
+never overwritten. The command creates `.sweet/` if the package does not yet
+have it. Release calculation is not yet implemented.

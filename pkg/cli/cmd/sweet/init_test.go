@@ -38,6 +38,12 @@ func TestInitLocations(t *testing.T) {
 				t.Fatalf("exit code = %d: %s", code, &stderr)
 			}
 			path := filepath.Join(root, tc.file)
+			if args[1] == "package" {
+				info, err := os.Stat(filepath.Join(filepath.Dir(path), ".sweet"))
+				if err != nil || !info.IsDir() {
+					t.Fatalf("release notes directory: %v", err)
+				}
+			}
 			if content, err := os.ReadFile(path); err != nil || len(content) == 0 {
 				t.Fatalf("config content = %q, error = %v", content, err)
 			}

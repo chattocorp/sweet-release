@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/chattocorp/sweet-release/packages/core"
+	"github.com/chattocorp/sweet-release/pkg/core"
 	"github.com/spf13/cobra"
 	"text/tabwriter"
 )

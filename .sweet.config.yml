@@ -1,2 +1,7 @@
 # Sweet repository configuration
-{}
+types:
+  - fix
+  - feature
+  - chore
+  - refactor
+  - performance
