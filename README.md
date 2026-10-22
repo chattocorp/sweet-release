@@ -122,6 +122,9 @@ release calculation and changelog generation are not yet implemented.
 
 ## Write release notes
 
+Run `sweet` to start the `sweet change` workflow. You can also pass `--type` and
+`--stdin` directly to `sweet`. Use `sweet --help` to show the available commands.
+
 Run `sweet change [package]` with a package directory, or omit the argument to use
 the current directory. The package must already contain a valid `.sweet.yml`.
 If the current directory is not a package, Sweet opens a built-in Charm package picker
