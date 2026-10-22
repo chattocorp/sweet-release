@@ -1,7 +1,8 @@
 # Sweet Release
 
 Release packages from Markdown change files. Initialize packages, write release
-notes, and inspect pending version bumps with `sweet status`.
+notes, inspect pending version bumps with `sweet status`, and prepare releases
+with `sweet bump`.
 
 ## Development
 
@@ -145,7 +146,51 @@ Each type supports two settings:
 For example, a type can trigger a patch without appearing in a changelog, or
 appear under a heading without triggering a bump. Unknown settings and invalid
 values produce configuration errors. `sweet status` uses these policies to
-calculate versions. Changelog generation is not yet implemented.
+calculate versions. `sweet bump` uses the sections to generate changelog entries.
+
+## Prepare a release
+
+```sh
+sweet bump                    # Choose pending releases interactively
+sweet bump pkg/core pkg/cli   # Prepare multiple packages from the repository root
+sweet bump .                  # Prepare the package in the current directory
+sweet bump --all              # Prepare all eligible packages from any directory
+```
+
+With no package arguments or `--all`, Sweet opens a searchable package picker.
+Only valid packages with a pending version bump appear. Each row shows the
+current version, next version, and bump. Type to fuzzy-filter, use the arrow
+keys to move, and press Space to toggle one or more packages. Selections remain
+selected when the filter changes. Press Enter to release the selected packages,
+or the highlighted package if none are selected. Esc or Ctrl+C cancels without
+changing files. Without a terminal, pass package paths or `--all`.
+Package paths are relative to the current directory. `--all` cannot be combined
+with package arguments.
+
+For each selected package that needs a version bump, the command updates
+`.sweet.yml`, creates or updates the package's `CHANGELOG.md`, and deletes the
+consumed `.sweet/*.md` notes. It uses the same version calculation as `sweet status`.
+The command changes local files; it does not commit, tag, publish, or create a PR.
+Other version files, such as `package.json`, are not updated.
+
+New changelogs start with `# Changelog`. Each release has a version heading,
+with sections in repository configuration order. Types with the same section
+share a heading. Notes appear in filename order within each section. Markdown
+bodies retain their formatting, with surrounding whitespace removed; breaking
+notes receive a bold label. Types without a section are omitted from the
+changelog but are still consumed. Existing introductions and release history
+are retained, with the new release inserted before the first level-two heading.
+
+Notes with `bump: none` remain pending until the package needs a release. That
+release consumes all its pending notes, including those with no version effect.
+Running the command again without new notes makes no changes.
+
+The command validates all selected packages and prepares their file changes
+before writing. Invalid notes or manifests in the selection stop the operation.
+An unrelated invalid package does not block an explicitly selected package.
+If a file operation fails, the command attempts to restore the affected files
+and reports any restoration errors. This does not protect against process
+interruption; review the Git diff before committing a release.
 
 ## Write release notes
 

@@ -65,6 +65,17 @@ func selectChangeType(cmd *cobra.Command, policies []core.ChangeType) (string, e
 }
 
 func pickOption(cmd *cobra.Command, kind string, options []string, annotations map[string]string) (string, error) {
+	initial := newPickerModel(kind, options)
+	initial.annotations = annotations
+	picker, err := runPicker(cmd, initial)
+	if err != nil {
+		return "", err
+	}
+	return picker.matches[picker.cursor], nil
+}
+
+func runPicker(cmd *cobra.Command, initial pickerModel) (pickerModel, error) {
+	kind := initial.kind
 	var input io.Reader = cmd.InOrStdin()
 	file, ok := input.(*os.File)
 	if !ok || !term.IsTerminal(int(file.Fd())) {
@@ -75,22 +86,20 @@ func pickOption(cmd *cobra.Command, kind string, options []string, annotations m
 		}
 		terminal, err := os.Open(device)
 		if err != nil {
-			return "", fmt.Errorf("open terminal for %s selection: %w", kind, err)
+			return initial, fmt.Errorf("open terminal for %s selection: %w", kind, err)
 		}
 		defer terminal.Close()
 		input = terminal
 	}
-	initial := newPickerModel(kind, options)
-	initial.annotations = annotations
 	model, err := tea.NewProgram(initial, tea.WithInput(input), tea.WithOutput(cmd.ErrOrStderr())).Run()
 	if err != nil {
-		return "", fmt.Errorf("select %s: %w", kind, err)
+		return initial, fmt.Errorf("select %s: %w", kind, err)
 	}
 	picker := model.(pickerModel)
 	if !picker.accepted {
-		return "", fmt.Errorf("%s selection cancelled", kind)
+		return picker, fmt.Errorf("%s selection cancelled", kind)
 	}
-	return picker.matches[picker.cursor], nil
+	return picker, nil
 }
 
 type pickerModel struct {
@@ -104,6 +113,18 @@ type pickerModel struct {
 	width       int
 	accepted    bool
 	cancelled   bool
+	multiple    bool
+	selected    map[string]bool
+}
+
+func (m pickerModel) selectedOptions() []string {
+	var options []string
+	for _, option := range m.options {
+		if m.selected[option] {
+			options = append(options, option)
+		}
+	}
+	return options
 }
 
 func newPickerModel(kind string, options []string) pickerModel {
@@ -128,11 +149,22 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cancelled = true
 			return m, tea.Quit
 		case "enter":
-			if len(m.matches) > 0 {
+			if len(m.matches) > 0 || (m.multiple && len(m.selectedOptions()) > 0) {
+				if m.multiple && len(m.selectedOptions()) == 0 {
+					m.selected[m.matches[m.cursor]] = true
+				}
 				m.accepted = true
 				return m, tea.Quit
 			}
 			return m, nil
+		case " ":
+			if m.multiple {
+				if len(m.matches) > 0 {
+					option := m.matches[m.cursor]
+					m.selected[option] = !m.selected[option]
+				}
+				return m, nil
+			}
 		case "up", "ctrl+p":
 			m.cursor = max(0, m.cursor-1)
 			return m, nil
@@ -162,7 +194,11 @@ func (m pickerModel) View() string {
 		return ""
 	}
 	var view strings.Builder
-	view.WriteString(lipgloss.NewStyle().Bold(true).Render("Choose a "+m.kind) + "\n")
+	title := "Choose a " + m.kind
+	if m.multiple {
+		title = "Choose packages to release"
+	}
+	view.WriteString(lipgloss.NewStyle().Bold(true).Render(title) + "\n")
 	view.WriteString(m.input.View() + "\n\n")
 	start := max(0, m.cursor-m.height+1)
 	for i := start; i < min(len(m.matches), start+m.height); i++ {
@@ -171,6 +207,13 @@ func (m pickerModel) View() string {
 		if i == m.cursor {
 			prefix = "❯ "
 			style = style.Bold(true).Foreground(lipgloss.Color("6"))
+		}
+		if m.multiple {
+			if m.selected[m.matches[i]] {
+				prefix += "[x] "
+			} else {
+				prefix += "[ ] "
+			}
 		}
 		row := style.Render(prefix + m.matches[i])
 		if annotation := m.annotations[m.matches[i]]; annotation != "" {
@@ -182,6 +225,10 @@ func (m pickerModel) View() string {
 	if len(m.matches) == 0 {
 		view.WriteString("No matching options\n")
 	}
-	fmt.Fprintf(&view, "\n%d/%d · ↑/↓ move · Enter select · Esc cancel", len(m.matches), len(m.options))
+	if m.multiple {
+		fmt.Fprintf(&view, "\n%d/%d · %d selected · ↑/↓ move · Space toggle · Enter confirm · Esc cancel", len(m.matches), len(m.options), len(m.selectedOptions()))
+	} else {
+		fmt.Fprintf(&view, "\n%d/%d · ↑/↓ move · Enter select · Esc cancel", len(m.matches), len(m.options))
+	}
 	return view.String()
 }
