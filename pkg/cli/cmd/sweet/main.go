@@ -28,21 +28,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func newRootCommand() *cobra.Command {
+	change := newChangeCommand()
 	cmd := &cobra.Command{
 		Use:           "sweet",
 		Short:         "Release packages from Markdown change files",
-		Long:          "Release packages from Markdown change files.\n\nRelease commands are not yet implemented.",
+		Long:          "Release packages from Markdown change files.\n\nWith no command, create a release note using the change workflow.\nRun 'sweet init repo' to create repository configuration at the Git root.\nRelease commands are not yet implemented.",
 		Version:       version,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Help()
-		},
+		RunE:          change.RunE,
 	}
+	cmd.Flags().AddFlagSet(change.Flags())
 	cmd.SetVersionTemplate("{{.Name}} {{.Version}}\n")
 	cmd.AddCommand(newInitCommand())
 	cmd.AddCommand(newStatusCommand())
-	cmd.AddCommand(newChangeCommand())
+	cmd.AddCommand(change)
 	return cmd
 }

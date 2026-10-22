@@ -152,7 +152,7 @@ func missingChangePackage(dir string, current, stdin bool) error {
 		}
 	}
 	if current {
-		return fmt.Errorf("%s\n\nRun 'sweet init package' here to create a package, or pass an existing package directory to 'sweet change'.", message)
+		return fmt.Errorf("%s\n\nTo set up Sweet in a new project:\n\n  sweet init repo       Create shared configuration at the Git repository root.\n  sweet init package    Make the current directory a release package.\n\nThen run 'sweet' again to write a release note.\nIf repository configuration already exists, skip 'sweet init repo'.\nFor an existing package elsewhere, run 'sweet change <dir>'.", message)
 	}
 	return fmt.Errorf("%s\n\nPass an existing package directory, or initialize this directory with 'sweet init package <dir>'.", message)
 }
