@@ -39,6 +39,60 @@ type ChangeType struct {
 	Section string
 }
 
+// RepositoryConfig contains shared release settings. ChangeTypes retains YAML order.
+type RepositoryConfig struct {
+	ChangeTypes       []ChangeType
+	ReleasePRStrategy string
+}
+
+type repositoryConfigNodes struct {
+	Types     yaml.Node `yaml:"types"`
+	ReleasePR yaml.Node `yaml:"release-pr"`
+}
+
+func decodeRepositoryConfig(data []byte) (repositoryConfigNodes, error) {
+	var nodes repositoryConfigNodes
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(&nodes); err != nil {
+		return nodes, fmt.Errorf("decode repository configuration: %w", err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return nodes, fmt.Errorf("expected one YAML document")
+	}
+	return nodes, nil
+}
+
+// LoadRepositoryConfig reads and validates the repository's shared settings once.
+// Missing settings use built-in types and the combined release PR strategy.
+func LoadRepositoryConfig(dir string) (RepositoryConfig, error) {
+	data, path, err := loadRepositoryConfig(dir)
+	if err != nil {
+		return RepositoryConfig{}, err
+	}
+	config, err := parseRepositoryConfig(data)
+	if err != nil {
+		return RepositoryConfig{}, fmt.Errorf("%s: %w", path, err)
+	}
+	return config, nil
+}
+
+func parseRepositoryConfig(data []byte) (RepositoryConfig, error) {
+	nodes, err := decodeRepositoryConfig(data)
+	if err != nil {
+		return RepositoryConfig{}, err
+	}
+	strategy, err := releasePRStrategy(nodes.ReleasePR)
+	if err != nil {
+		return RepositoryConfig{}, err
+	}
+	types, err := changeTypes(nodes.Types)
+	if err != nil {
+		return RepositoryConfig{}, err
+	}
+	return RepositoryConfig{ChangeTypes: types, ReleasePRStrategy: strategy}, nil
+}
+
 // ChangeTypes loads shared types from the package's Git repository root.
 // Missing configuration or an omitted types field uses the built-in defaults.
 func ChangeTypes(dir string) ([]string, error) {
@@ -55,15 +109,8 @@ func ChangeTypes(dir string) ([]string, error) {
 
 // LoadChangeTypes loads release policies in their configured display order.
 func LoadChangeTypes(dir string) ([]ChangeType, error) {
-	data, path, err := loadRepositoryConfig(dir)
-	if err != nil {
-		return nil, err
-	}
-	types, err := parseChangeTypes(data)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
-	}
-	return types, nil
+	config, err := LoadRepositoryConfig(dir)
+	return config.ChangeTypes, err
 }
 
 func loadRepositoryConfig(dir string) ([]byte, string, error) {
@@ -82,31 +129,22 @@ func loadRepositoryConfig(dir string) ([]byte, string, error) {
 }
 
 func parseChangeTypes(data []byte) ([]ChangeType, error) {
-	if _, err := parseReleasePRStrategy(data); err != nil {
-		return nil, err
+	config, err := parseRepositoryConfig(data)
+	return config.ChangeTypes, err
+}
+
+func changeTypes(typeNode yaml.Node) ([]ChangeType, error) {
+	if typeNode.Kind == 0 {
+		return []ChangeType{{"fix", "minor", "Fixes"}, {"feature", "minor", "Features"}, {"chore", "none", ""}, {"refactor", "none", ""}, {"performance", "patch", "Performance"}}, nil
 	}
-	var config struct {
-		Types yaml.Node `yaml:"types"`
-	}
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(&config); err != nil {
-		return nil, fmt.Errorf("decode repository configuration: %w", err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return nil, fmt.Errorf("expected one YAML document")
-	}
-	if config.Types.Kind == 0 {
-		return parseChangeTypes([]byte(defaultRepositoryConfig))
-	}
-	if config.Types.Kind != yaml.MappingNode || len(config.Types.Content) == 0 {
+	if typeNode.Kind != yaml.MappingNode || len(typeNode.Content) == 0 {
 		return nil, fmt.Errorf("types must be a non-empty mapping, for example: types: {fix: {bump: minor, section: Fixes}}")
 	}
 	valid := regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 	seen := map[string]bool{}
-	types := make([]ChangeType, 0, len(config.Types.Content)/2)
-	for i := 0; i < len(config.Types.Content); i += 2 {
-		node := config.Types.Content[i]
+	types := make([]ChangeType, 0, len(typeNode.Content)/2)
+	for i := 0; i < len(typeNode.Content); i += 2 {
+		node := typeNode.Content[i]
 		name := node.Value
 		if node.Tag != "!!str" || !valid.MatchString(name) {
 			return nil, fmt.Errorf("invalid change type %q: use lowercase letters, digits, and hyphens, starting with a letter", name)
@@ -115,7 +153,7 @@ func parseChangeTypes(data []byte) ([]ChangeType, error) {
 			return nil, fmt.Errorf("duplicate change type %q", name)
 		}
 		seen[name] = true
-		policy := config.Types.Content[i+1]
+		policy := typeNode.Content[i+1]
 		if policy.Kind != yaml.MappingNode {
 			return nil, fmt.Errorf("type %q must be a mapping with bump and section settings", name)
 		}

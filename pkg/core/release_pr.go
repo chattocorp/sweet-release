@@ -1,11 +1,9 @@
 package core
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -29,18 +27,14 @@ func LoadReleasePRStrategy(dir string) (string, error) {
 }
 
 func parseReleasePRStrategy(data []byte) (string, error) {
-	var config struct {
-		ReleasePR yaml.Node `yaml:"release-pr"`
+	config, err := decodeRepositoryConfig(data)
+	if err != nil {
+		return "", err
 	}
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(&config); err != nil {
-		return "", fmt.Errorf("decode repository configuration: %w", err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return "", fmt.Errorf("expected one YAML document")
-	}
-	node := config.ReleasePR
+	return releasePRStrategy(config.ReleasePR)
+}
+
+func releasePRStrategy(node yaml.Node) (string, error) {
 	strategy := "combined"
 	if node.Kind == 0 {
 		return strategy, nil
@@ -80,11 +74,12 @@ func PlanReleasePRs(root string) ([]ReleasePR, error) {
 	if err != nil {
 		return nil, err
 	}
-	strategy, err := LoadReleasePRStrategy(root)
+	config, err := LoadRepositoryConfig(root)
 	if err != nil {
 		return nil, err
 	}
-	statuses, err := RepositoryStatus(root)
+	strategy := config.ReleasePRStrategy
+	statuses, err := repositoryStatus(root, config)
 	if err != nil {
 		return nil, err
 	}

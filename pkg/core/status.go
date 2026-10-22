@@ -45,6 +45,11 @@ func (p Problem) Error() string { return p.Path + ": " + p.Message }
 // It reads tracked and untracked notes, respecting Git ignore rules.
 // Packages with file problems have no calculated bump or next version.
 func RepositoryStatus(root string) ([]PackageStatus, error) {
+	return repositoryStatus(root, RepositoryConfig{})
+}
+
+// repositoryStatus reuses loaded settings, or loads them after package discovery.
+func repositoryStatus(root string, config RepositoryConfig) ([]PackageStatus, error) {
 	paths, err := repositoryFiles(root)
 	if err != nil {
 		return nil, err
@@ -53,10 +58,13 @@ func RepositoryStatus(root string) ([]PackageStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	types, err := LoadChangeTypes(root)
-	if err != nil {
-		return nil, err
+	if config.ChangeTypes == nil {
+		config, err = LoadRepositoryConfig(root)
+		if err != nil {
+			return nil, err
+		}
 	}
+	types := config.ChangeTypes
 	policies := make(map[string]string, len(types))
 	for _, typ := range types {
 		policies[typ.Name] = typ.Bump

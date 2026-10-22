@@ -9,6 +9,86 @@ import (
 	"testing"
 )
 
+func TestRepositoryConfig(t *testing.T) {
+	for _, tc := range []struct{ data, strategy string }{
+		{"{}", "combined"},
+		{"release-pr: {}", "combined"},
+		{defaultRepositoryConfig, "per-package"},
+	} {
+		config, err := parseRepositoryConfig([]byte(tc.data))
+		if err != nil || config.ReleasePRStrategy != tc.strategy || len(config.ChangeTypes) != 5 {
+			t.Fatalf("config = %+v, error = %v", config, err)
+		}
+		config.ChangeTypes[0].Name = "changed"
+		fresh, err := parseRepositoryConfig([]byte(tc.data))
+		if err != nil || fresh.ChangeTypes[0].Name != "fix" {
+			t.Fatalf("defaults were shared: %+v, %v", fresh, err)
+		}
+	}
+	config, err := parseRepositoryConfig([]byte("release-pr: {strategy: per-package}\ntypes: {security: {bump: patch}, docs: {section: Documentation}}"))
+	want := []ChangeType{{"security", "patch", ""}, {"docs", "none", "Documentation"}}
+	if err != nil || config.ReleasePRStrategy != "per-package" || !reflect.DeepEqual(config.ChangeTypes, want) {
+		t.Fatalf("config = %+v, error = %v", config, err)
+	}
+	for _, data := range []string{
+		"release-pr: {strategy: invalid}", "types: {}", "{}\n---\n{}",
+		"types: {}\ntypes: {}", "release-pr: {}\nrelease-pr: {}",
+		"types: {fix: {bump: patch, bump: minor}}", "release-pr: {unknown: true}",
+	} {
+		if _, err := parseRepositoryConfig([]byte(data)); err == nil {
+			t.Errorf("accepted invalid configuration: %s", data)
+		}
+	}
+}
+
+func TestLoadRepositoryConfig(t *testing.T) {
+	root := t.TempDir()
+	config, err := LoadRepositoryConfig(root)
+	if err != nil || config.ReleasePRStrategy != "combined" || len(config.ChangeTypes) != 5 {
+		t.Fatalf("missing config = %+v, error = %v", config, err)
+	}
+	path := filepath.Join(root, ".sweet.config.yml")
+	if err := os.WriteFile(path, []byte("types: {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadRepositoryConfig(root); err == nil || !strings.Contains(err.Error(), path) {
+		t.Fatalf("missing configuration path: %v", err)
+	}
+	// The strategy-only compatibility API does not validate unrelated policies.
+	if strategy, err := LoadReleasePRStrategy(root); err != nil || strategy != "combined" {
+		t.Fatalf("strategy = %q, error = %v", strategy, err)
+	}
+}
+
+func TestRepositoryStatusUsesLoadedConfig(t *testing.T) {
+	root := t.TempDir()
+	if output, err := exec.Command("git", "init", root).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, output)
+	}
+	if _, err := InitPackage(root); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".sweet.config.yml")
+	if err := os.WriteFile(path, []byte("types: {security: {bump: patch}}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CreateChange(root, "security", strings.NewReader("Security fix.")); err != nil {
+		t.Fatal(err)
+	}
+	config, err := LoadRepositoryConfig(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A later read would fail; the operation must use its loaded policy snapshot.
+	if err := os.WriteFile(path, []byte("types: []"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	statuses, err := repositoryStatus(root, config)
+	if err != nil || len(statuses) != 1 || statuses[0].Bump != "patch" || statuses[0].NextVersion != "0.0.1" {
+		t.Fatalf("statuses = %+v, error = %v", statuses, err)
+	}
+}
+
 func TestChangeTypeConfiguration(t *testing.T) {
 	for _, data := range []string{"types: []", "types: null", "types: fix", "types: [fix, fix]", "types: [1]", "types: ['bad name']", "types: [Fix]", "types: [", "types: [fix]\n---\ntypes: [feature]", "types: [fix]\ntypes: [feature]"} {
 		if _, err := parseChangeTypes([]byte(data)); err == nil {

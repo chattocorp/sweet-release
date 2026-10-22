@@ -18,14 +18,15 @@ func Bump(root string, paths []string) ([]PackageStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	statuses, err := RepositoryStatus(root)
+	config, err := LoadRepositoryConfig(root)
 	if err != nil {
 		return nil, err
 	}
-	types, err := LoadChangeTypes(root)
+	statuses, err := repositoryStatus(root, config)
 	if err != nil {
 		return nil, err
 	}
+	types := config.ChangeTypes
 	wanted := map[string]bool{}
 	for _, path := range paths {
 		wanted[filepath.ToSlash(filepath.Clean(path))] = false
