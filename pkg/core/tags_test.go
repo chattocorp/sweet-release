@@ -77,6 +77,23 @@ func TestPlanTagsVersionsAndCommits(t *testing.T) {
 	}
 }
 
+func TestDisplayNameDoesNotChangeTags(t *testing.T) {
+	root, _, write, commit := tagFixture(t)
+	write("pkg/cli/.sweet.yml", "version: 0.1.0\n")
+	base := commit()
+	write("pkg/cli/.sweet.yml", "version: 0.1.0\nname: Sweet Release\n")
+	renamed := commit()
+	tags, err := PlanTags(root, base, renamed)
+	if err != nil || len(tags) != 0 {
+		t.Fatalf("name change produced tags: %v, %v", tags, err)
+	}
+	write("pkg/cli/.sweet.yml", "version: 0.2.0\nname: Sweet Release\n")
+	tags, err = PlanTags(root, renamed, commit())
+	if err != nil || len(tags) != 1 || tags[0].Name != "pkg/cli/v0.2.0" {
+		t.Fatalf("name affected tag: %v, %v", tags, err)
+	}
+}
+
 func TestPlanTagsMergeUsesFirstParent(t *testing.T) {
 	root, git, write, commit := tagFixture(t)
 	write("pkg/api/.sweet.yml", "version: 0.0.0\n")

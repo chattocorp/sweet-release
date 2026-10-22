@@ -12,12 +12,22 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 // Package identifies a release package by its repository-relative path.
 type Package struct {
-	Path    string
-	Version string
+	Path    string `json:"path"`
+	Version string `json:"version"`
+	Name    string `json:"name,omitempty"`
+}
+
+// DisplayName returns presentation metadata, never a package identifier.
+func (p Package) DisplayName() string {
+	if p.Name != "" {
+		return p.Name
+	}
+	return p.Path
 }
 
 // RepositoryRoot returns the root of the current Git repository.
@@ -64,13 +74,17 @@ func discoverPackages(root string) ([]Package, []Problem, error) {
 			continue
 		} // A tracked manifest may have been deleted locally.
 		var version string
+		var name string
 		if err == nil {
 			version, err = readPackageVersion(content)
+			if err == nil {
+				name, err = readPackageName(content)
+			}
 		}
 		if err != nil {
 			problems = append(problems, Problem{Path: path, Message: err.Error()})
 		}
-		packages = append(packages, Package{Path: filepath.ToSlash(filepath.Dir(path)), Version: version})
+		packages = append(packages, Package{Path: filepath.ToSlash(filepath.Dir(path)), Version: version, Name: name})
 	}
 	sort.Slice(packages, func(i, j int) bool { return packages[i].Path < packages[j].Path })
 	return packages, problems, nil
@@ -95,5 +109,25 @@ func readPackageVersion(content []byte) (string, error) {
 	if _, err := readVersionFiles(content); err != nil {
 		return "", err
 	}
+	if _, err := readPackageName(content); err != nil {
+		return "", err
+	}
 	return version.Value, nil
+}
+
+func readPackageName(content []byte) (string, error) {
+	var manifest struct {
+		Name yaml.Node `yaml:"name"`
+	}
+	if err := yaml.Unmarshal(content, &manifest); err != nil {
+		return "", err
+	}
+	n := manifest.Name
+	if n.Kind == 0 {
+		return "", nil
+	}
+	if n.Kind != yaml.ScalarNode || n.Tag != "!!str" || strings.TrimSpace(n.Value) == "" || strings.TrimSpace(n.Value) != n.Value || strings.IndexFunc(n.Value, unicode.IsControl) >= 0 {
+		return "", fmt.Errorf("name must be a non-empty single-line string without surrounding whitespace")
+	}
+	return n.Value, nil
 }

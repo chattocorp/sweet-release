@@ -65,7 +65,7 @@ func TestBumpWorkflow(t *testing.T) {
 		}
 	}
 	changelog := read("api/CHANGELOG.md")
-	want := "# Changelog\n\n## 1.3.0\n\n### Added\n\n- New API.\n\n  ```go\n  call()\n  ```\n\n- Updated guide.\n"
+	want := "# api Changelog\n\n## 1.3.0\n\n### Added\n\n- New API.\n\n  ```go\n  call()\n  ```\n\n- Updated guide.\n"
 	if changelog != want {
 		t.Fatalf("changelog = %q, want %q", changelog, want)
 	}
@@ -85,7 +85,7 @@ func TestBumpWorkflow(t *testing.T) {
 	write("api/.sweet/fix.md", note("fix", "Fixed API."))
 	t.Chdir(filepath.Join(root, "api"))
 	invoke(0, "bump", ".")
-	if got := read("CHANGELOG.md"); !strings.HasSuffix(got, strings.TrimPrefix(changelog, "# Changelog\n\n")) || !strings.Contains(got, "## 1.3.1\n\n### Fixes") {
+	if got := read("CHANGELOG.md"); !strings.HasSuffix(got, strings.TrimPrefix(changelog, "# api Changelog\n\n")) || !strings.Contains(got, "## 1.3.1\n\n### Fixes") {
 		t.Fatal(got)
 	}
 	t.Chdir(root)

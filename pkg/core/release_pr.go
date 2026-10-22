@@ -136,7 +136,7 @@ func PlanReleasePRs(root string) ([]ReleasePR, error) {
 		if strategy == "per-package" {
 			prs = append(prs, ReleasePR{
 				Branch:   packageReleaseBranch(status.Path),
-				Title:    fmt.Sprintf("chore: release %s %s", status.Path, status.NextVersion),
+				Title:    fmt.Sprintf("chore: release %s %s", status.DisplayName(), status.NextVersion),
 				Packages: []string{status.Path},
 			})
 		}

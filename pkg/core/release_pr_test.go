@@ -40,6 +40,31 @@ func TestReleasePRStrategy(t *testing.T) {
 	}
 }
 
+func TestDisplayNamesDoNotIdentifyPackages(t *testing.T) {
+	root, write := releasePRFixture(t)
+	write(".sweet.config.yml", "release-pr: {strategy: per-package}\n")
+	for _, path := range []string{"a", "b"} {
+		write(path+"/.sweet.yml", "version: 1.0.0\nname: Shared Name\n")
+		write(path+"/.sweet/note.md", "---\ntype: feature\n---\nNew feature.\n")
+	}
+	prs, err := PlanReleasePRs(root)
+	if err != nil || len(prs) != 2 {
+		t.Fatalf("%v, %v", prs, err)
+	}
+	for i, path := range []string{"a", "b"} {
+		if prs[i].Title != "chore: release Shared Name 1.1.0" || prs[i].Branch != packageReleaseBranch(path) || prs[i].Packages[0] != path {
+			t.Fatalf("wrong plan: %+v", prs[i])
+		}
+	}
+	if _, err := Bump(root, nil); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(filepath.Join(root, "a/CHANGELOG.md"))
+	if err != nil || !strings.HasPrefix(string(content), "# Shared Name Changelog\n") {
+		t.Fatalf("%s, %v", content, err)
+	}
+}
+
 func releasePRFixture(t *testing.T) (string, func(string, string)) {
 	t.Helper()
 	root := t.TempDir()

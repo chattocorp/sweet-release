@@ -13,6 +13,9 @@
 Sweet tracks each package's version in `.sweet.yml` and its pending changes in
 `.sweet/*.md`. Repository-wide policies live in `.sweet.config.yml`.
 
+An optional `name` in `.sweet.yml` supplies a display name for changelogs and
+releases. Names need not be unique; paths still identify packages and determine tags.
+
 ```sh
 sweet init repo               # Initialize repository configuration
 sweet init package pkg/api    # Initialize an existing package directory

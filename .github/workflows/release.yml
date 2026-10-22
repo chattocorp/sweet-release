@@ -33,8 +33,15 @@ jobs:
         with:
           fetch-depth: 0
       # Use this workflow's tooling even when publishing an older source tag.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: pkg/cli/go.mod
+          cache-dependency-path: |
+            pkg/cli/go.sum
+            pkg/core/go.sum
       - name: Preserve release tooling
         run: |
+          go build -o "$RUNNER_TEMP/sweet-metadata" ./pkg/cli/cmd/sweet
           cp .goreleaser.yml "$RUNNER_TEMP/goreleaser.yml"
           cp .github/scripts/publish-cli.sh "$RUNNER_TEMP/publish-cli.sh"
       - name: Check out release source
@@ -61,4 +68,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ inputs.tag }}
+          SWEET_METADATA: ${{ runner.temp }}/sweet-metadata
         run: bash "$RUNNER_TEMP/publish-cli.sh" "$TAG" "$RUNNER_TEMP/goreleaser.yml"

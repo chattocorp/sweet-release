@@ -77,7 +77,10 @@ jobs:
           go vet ./pkg/cli/... ./pkg/core/...
           go build -o "$RUNNER_TEMP/sweet" ./pkg/cli/cmd/sweet
       - name: Describe pending releases
+        env:
+          PACKAGES: ${{ toJSON(matrix.packages) }}
         run: |
+          "$RUNNER_TEMP/sweet" status --json > "$RUNNER_TEMP/packages.json"
           # Include first-release changelogs in the diff without staging their contents.
           while IFS= read -r -d '' path; do
             git add --intent-to-add -- "$path"
@@ -86,19 +89,15 @@ jobs:
           {
             printf 'This PR prepares the following releases:\n'
 
-            git -c core.quotePath=false diff --no-ext-diff --no-color --unified=0 -- CHANGELOG.md '**/CHANGELOG.md' |
+            while IFS= read -r -d '' package; do
+              name=$(jq -r --arg path "$package" '.[] | select(.path == $path) | if (.name // "") == "" then .path else .name end' "$RUNNER_TEMP/packages.json")
+              printf '\n## %s\n' "$name"
+              git diff --no-ext-diff --no-color --unified=0 -- "$package/CHANGELOG.md" |
               awk '
-                /^\+\+\+ b\// {
-                  package = substr($0, 7)
-                  sub(/\/?CHANGELOG\.md$/, "", package)
-                  if (package == "") package = "."
-                  printf "\n## `%s`\n", package
-                  version = 0
-                  next
-                }
+                /^\+\+\+/ { next }
                 /^\+/ {
                   line = substr($0, 2)
-                  if (!version && line == "# Changelog") next
+                  if (!version && line ~ /^# /) next
                   if (!version && line ~ /^## /) {
                     printf "\nTarget version: **%s**\n", substr(line, 4)
                     version = 1
@@ -107,6 +106,7 @@ jobs:
                   print line
                 }
               '
+            done < <(jq -j '.[] | ., "\u0000"' <<< "$PACKAGES")
           } > "$RUNNER_TEMP/release-pr-body.md"
       - name: Create or update release PR
         uses: peter-evans/create-pull-request@v8

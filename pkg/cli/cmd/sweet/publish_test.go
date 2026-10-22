@@ -44,6 +44,7 @@ func TestCLIPublishing(t *testing.T) {
 			}
 			write("pkg/cli/CHANGELOG.md", "# Changelog\n\n## "+tc.version+"\n\n- New feature.\n\n## 0.0.1\n\n- Old feature.\n")
 			write("bin/git", "#!/bin/sh\necho commit\n")
+			write("bin/sweet", "#!/bin/sh\nprintf '%s\\n' '[{\"path\":\"pkg/cli\",\"name\":\"Sweet Release\"}]'\n")
 			write("bin/goreleaser", `#!/bin/sh
 echo build >> "$TEST_LOG"
 [ "$TEST_FAILURE" != build ] || exit 1
@@ -70,6 +71,7 @@ done
 `)
 			cmd := exec.Command("bash", script, "pkg/cli/v"+tc.version, "config.yml")
 			cmd.Dir = root
+			t.Setenv("SWEET_METADATA", filepath.Join(root, "bin/sweet"))
 			cmd.Env = append(os.Environ(), "PATH="+filepath.Join(root, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"), "TEST_LOG="+filepath.Join(root, "log"), "TEST_NOTES="+filepath.Join(root, "notes"), "TEST_STATE="+tc.state, "TEST_FAILURE="+tc.failure, "TEST_VERSION="+tc.version)
 			out, err := cmd.CombinedOutput()
 			if (err != nil) != tc.wantFailure {
@@ -88,6 +90,9 @@ done
 				t.Fatalf("recreated draft: %s", text)
 			}
 			if published {
+				if !strings.Contains(text, "--title Sweet Release "+tc.version) {
+					t.Fatalf("wrong title: %s", text)
+				}
 				notes, _ := os.ReadFile(filepath.Join(root, "notes"))
 				if !strings.Contains(string(notes), "New feature") || strings.Contains(string(notes), "Old feature") {
 					t.Fatalf("wrong notes: %s", notes)

@@ -226,6 +226,23 @@ New package manifests start with:
 version: 0.0.0
 ```
 
+Add an optional display name, for example `name: Sweet Release`. It must be a
+non-empty single-line string without surrounding whitespace. Names need not be
+unique and never affect package selection, branch names, or version tags. When
+omitted, the repository-relative path is the display name (`.` for a root package).
+`sweet init package` leaves the name unset.
+
+Display names appear in per-package PR titles, package headings in release PRs,
+and new changelog titles (`# <display name> Changelog`). Existing changelog
+introductions are preserved. CLI publishing reads the name from the tagged
+manifest for the GitHub Release title; already published releases remain unchanged.
+The workflow builds a current metadata reader before checking out older source
+tags, so it can read manifests even when the tagged CLI predates this feature.
+
+`sweet status --json` exposes the inventory for automation, including `path`,
+optional `name`, `version`, `changes`, `bump`, `nextVersion`, and `problems`.
+The default status table continues to show paths.
+
 `sweet status` shows a repository-wide inventory from any directory:
 
 ```text
@@ -321,7 +338,7 @@ The command changes local files; it does not commit, tag, publish, or create a P
 Other version files are updated only when listed in the package's `version-files`
 configuration, described below.
 
-New changelogs start with `# Changelog`. Each release has a version heading,
+New changelogs start with `# <display name> Changelog`. Each release has a version heading,
 with sections in repository configuration order. Types with the same section
 share a heading. Notes appear in filename order within each section. Markdown
 bodies appear as bullet items, with continuation lines indented to retain their

@@ -18,25 +18,25 @@ import (
 
 // Change is a pending package release note. Path is relative to the repository.
 type Change struct {
-	Path     string
-	Type     string
-	Breaking bool
-	Body     string
+	Path     string `json:"path"`
+	Type     string `json:"type"`
+	Breaking bool   `json:"breaking"`
+	Body     string `json:"body"`
 }
 
 // PackageStatus describes a package and the combined effect of its pending notes.
 type PackageStatus struct {
 	Package
-	Changes     []Change
-	Bump        string
-	NextVersion string
-	Problems    []Problem
+	Changes     []Change  `json:"changes"`
+	Bump        string    `json:"bump"`
+	NextVersion string    `json:"nextVersion"`
+	Problems    []Problem `json:"problems"`
 }
 
 // Problem identifies a file that prevents a reliable release calculation.
 type Problem struct {
-	Path    string
-	Message string
+	Path    string `json:"path"`
+	Message string `json:"message"`
 }
 
 func (p Problem) Error() string { return p.Path + ": " + p.Message }

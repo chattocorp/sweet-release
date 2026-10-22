@@ -96,7 +96,11 @@ func Bump(root string, paths []string) ([]PackageStatus, error) {
 		if err != nil {
 			return nil, err
 		}
-		changelog.after = []byte(insertRelease(string(changelog.before), releaseEntry(status, types)))
+		introduction := string(changelog.before)
+		if strings.TrimSpace(introduction) == "" {
+			introduction = "# " + status.DisplayName() + " Changelog\n"
+		}
+		changelog.after = []byte(insertRelease(introduction, releaseEntry(status, types)))
 		edits = append(edits, manifest, changelog)
 		for _, change := range status.Changes {
 			edit, err := readReleaseEdit(filepath.Join(root, change.Path), false)

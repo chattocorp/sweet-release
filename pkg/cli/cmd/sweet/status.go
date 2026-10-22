@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/chattocorp/sweet-release/pkg/core"
 	"github.com/spf13/cobra"
@@ -9,7 +10,8 @@ import (
 )
 
 func newStatusCommand() *cobra.Command {
-	return &cobra.Command{
+	var asJSON bool
+	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show package versions, pending changes, and expected releases",
 		Args:  cobra.NoArgs,
@@ -21,6 +23,9 @@ func newStatusCommand() *cobra.Command {
 			packages, err := core.RepositoryStatus(root)
 			if err != nil {
 				return err
+			}
+			if asJSON {
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(packages)
 			}
 			if len(packages) == 0 {
 				cmd.Println("No packages found.")
@@ -54,4 +59,6 @@ func newStatusCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Print the package inventory as JSON")
+	return cmd
 }
