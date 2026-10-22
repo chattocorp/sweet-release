@@ -4,20 +4,21 @@ import (
 	"fmt"
 	"github.com/chattocorp/sweet-release/pkg/core"
 	"github.com/spf13/cobra"
+	"strings"
 	"text/tabwriter"
 )
 
 func newStatusCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show package paths and current versions in the repository",
+		Short: "Show package versions, pending changes, and expected releases",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, err := core.RepositoryRoot()
 			if err != nil {
 				return err
 			}
-			packages, err := core.DiscoverPackages(root)
+			packages, err := core.RepositoryStatus(root)
 			if err != nil {
 				return err
 			}
@@ -26,11 +27,31 @@ func newStatusCommand() *cobra.Command {
 				return nil
 			}
 			out := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
-			fmt.Fprintln(out, "PACKAGE\tVERSION")
+			fmt.Fprintln(out, "PACKAGE\tVERSION\tBUMP\tNEXT")
 			for _, pkg := range packages {
-				fmt.Fprintf(out, "%s\t%s\n", pkg.Path, pkg.Version)
+				bump, next := pkg.Bump, pkg.NextVersion
+				if len(pkg.Changes) == 0 {
+					bump, next = "", ""
+				}
+				if len(pkg.Problems) > 0 {
+					bump, next = "invalid", ""
+				}
+				fmt.Fprintf(out, "%s\t%s\t%s\t%s\n", pkg.Path, pkg.Version, bump, next)
 			}
-			return out.Flush()
+			if err := out.Flush(); err != nil {
+				return err
+			}
+			var problems []core.Problem
+			for _, pkg := range packages {
+				problems = append(problems, pkg.Problems...)
+			}
+			if len(problems) > 0 {
+				cmd.Println("\nProblems:")
+				for _, problem := range problems {
+					cmd.Printf("- %s: %s\n", problem.Path, strings.ReplaceAll(problem.Message, "\n", "\n  "))
+				}
+			}
+			return nil
 		},
 	}
 }

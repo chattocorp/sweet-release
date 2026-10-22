@@ -1,7 +1,7 @@
 # Sweet Release
 
-Release packages from Markdown change files. Initialization and package listing
-are implemented; release calculation is still in development.
+Release packages from Markdown change files. Initialize packages, write release
+notes, and inspect pending version bumps with `sweet status`.
 
 ## Development
 
@@ -80,9 +80,36 @@ New package manifests start with:
 version: 0.0.0
 ```
 
-`sweet status` shows package paths and versions from anywhere in the repository.
-It includes nested packages and respects Git ignore rules for untracked files.
-Package names are not required. Dependency metadata is not yet implemented.
+`sweet status` shows a repository-wide inventory from any directory:
+
+```text
+PACKAGE   VERSION  BUMP   NEXT
+pkg/api   1.2.3    minor  1.3.0
+pkg/core  0.2.0
+```
+
+`BUMP` is the highest required bump from pending `.sweet/*.md` notes:
+`major`, `minor`, `patch`, or `none`. Packages with no pending notes have blank
+`BUMP` and `NEXT` cells.
+`NEXT` applies that bump once to the manifest version. With no bump, the version
+stays unchanged. A bump increments the selected version component, resets lower
+components to zero, and removes prerelease and build suffixes. Manifest versions
+must be complete semantic versions such as `1.2.3` or `2.0.0-beta.1`.
+
+Notes with `breaking: true` require at least a minor bump for `0.x` versions and
+a major bump for other versions. An explicit major type policy still takes
+precedence for `0.x` packages. The manifest version is the starting point even
+if the package has no previous release.
+
+The inventory includes nested packages. It reads tracked and untracked files,
+respects Git ignore rules for untracked files, and skips locally deleted files.
+Only direct Markdown files in each package's `.sweet/` directory are notes.
+Malformed notes, unknown types or properties, and invalid package manifests
+appear in a `Problems` list with file paths. Affected packages show `invalid`
+in the `BUMP` column and no next version; other packages still show their status.
+The command succeeds when it can complete the inventory, even if it finds file
+problems. Repository discovery and configuration failures still stop the command.
+Package names are not required. Dependency propagation is not yet implemented.
 
 `sweet init repo` starts `.sweet.config.yml` with:
 
@@ -117,8 +144,8 @@ Each type supports two settings:
 
 For example, a type can trigger a patch without appearing in a changelog, or
 appear under a heading without triggering a bump. Unknown settings and invalid
-values produce configuration errors. These policies are loaded and validated;
-release calculation and changelog generation are not yet implemented.
+values produce configuration errors. `sweet status` uses these policies to
+calculate versions. Changelog generation is not yet implemented.
 
 ## Write release notes
 
@@ -143,6 +170,7 @@ The command creates `.sweet/<three-word-id>.md` with YAML frontmatter such as:
 ```markdown
 ---
 type: fix
+breaking: false
 ---
 
 ```
@@ -161,6 +189,7 @@ printf 'Add package discovery.\n' | sweet change pkg/cli --type feature --stdin
 
 `--stdin` writes input verbatim as the Markdown body below the generated frontmatter
 and skips the description prompt and editor. Supply body text, not a complete frontmatter document.
-Existing notes are
-never overwritten. The command creates `.sweet/` if the package does not yet
-have it. Release calculation is not yet implemented.
+Existing notes are never overwritten. The command creates `.sweet/` if the
+package does not yet have it. Notes require a `type`; the optional `breaking`
+field defaults to false. Other frontmatter fields are rejected. The Markdown
+body is preserved when notes are read for the status inventory.
