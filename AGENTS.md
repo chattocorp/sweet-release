@@ -60,6 +60,10 @@ The snapshot runs tests and static checks, then creates archives and SHA-256
 checksums in `dist/` without publishing. It builds `sweet` for Linux, macOS,
 and Windows on amd64 and arm64. Windows archives use ZIP; the others use tar.gz.
 The binary's `--version` output contains the release or snapshot version.
+Local builds default to `cli.Version` in `pkg/cli/version.go`. The CLI package's
+`version-files` entry updates its annotated constant during `sweet bump`.
+The existing `-X main.version=...` linker option overrides the displayed version
+for release and snapshot builds.
 
 To publish a CLI release, update `pkg/cli/.sweet.yml` to the intended
 version and commit it with the release changes. Once that commit and the release
