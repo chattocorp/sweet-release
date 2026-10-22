@@ -27,6 +27,8 @@ func TestVersionFileFormatsPreserveContent(t *testing.T) {
 		{"YAML flow", "yaml", "version", "{version: 1.2.3, other: value}\n", "{version: 2.0.0, other: value}\n"},
 		{"YAML double quoted", "yaml", "version", "version: \"1.2.3\"\r\n", "version: \"2.0.0\"\r\n"},
 		{"YAML BOM", "yaml", "version", "\ufeffversion: 1.2.3\n", "\ufeffversion: 2.0.0\n"},
+		{"YAML CR lines", "yaml", "version", "# Intro\rversion: 1.2.3\r", "# Intro\rversion: 2.0.0\r"},
+		{"YAML Unicode lines", "yaml", "version", "# Intro\u0085version: 1.2.3\n", "# Intro\u0085version: 2.0.0\n"},
 		{"TOML table", "toml", "project.version", "# Intro\n[project]\nversion = '1.2.3' # Keep\nname = \"hello\"\n", "# Intro\n[project]\nversion = '2.0.0' # Keep\nname = \"hello\"\n"},
 		{"TOML dotted", "toml", "project.version", "project.version = \"1.2.3\"\r\n", "project.version = \"2.0.0\"\r\n"},
 		{"TOML inline", "toml", "project.release.version", "project = {release = {version = \"1.2.3\"}, name = 'keep'}\n", "project = {release = {version = \"2.0.0\"}, name = 'keep'}\n"},

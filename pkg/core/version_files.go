@@ -235,23 +235,15 @@ func yamlVersionReplacement(data []byte, keys []string, version string, isJSON b
 	if _, err := nextVersion(node.Value, "none"); err != nil {
 		return zero, err
 	}
-	start := 0
-	if bytes.HasPrefix(data, []byte("\xef\xbb\xbf")) {
-		start = 3 // YAML source columns exclude the UTF-8 byte order mark.
-	}
-	for line := 1; line < node.Line; line++ {
-		n := bytes.IndexByte(data[start:], '\n')
-		if n < 0 {
-			return zero, fmt.Errorf("invalid scalar position")
-		}
-		start += n + 1
-	}
-	for column := 1; column < node.Column; column++ {
-		_, size := utf8.DecodeRune(data[start:])
-		start += size
+	start, err := yamlSourceOffset(data, node.Line, node.Column)
+	if err != nil {
+		return zero, err
 	}
 	end := start + len(node.Value)
 	value := version
+	if node.Style == 0 && !bytes.HasPrefix(data[start:], []byte(node.Value)) {
+		return zero, fmt.Errorf("YAML scalar position does not match its value")
+	}
 	if data[start] == '"' || data[start] == '\'' {
 		quote := data[start]
 		end = start + 1
@@ -273,6 +265,33 @@ func yamlVersionReplacement(data []byte, keys []string, version string, isJSON b
 		value = string(quote) + version + string(quote)
 	}
 	return versionReplacement{start, end, value}, nil
+}
+
+// YAML counts Unicode characters and recognizes more line breaks than LF/CRLF.
+func yamlSourceOffset(data []byte, targetLine, targetColumn int) (int, error) {
+	offset, line, column := 0, 1, 1
+	if bytes.HasPrefix(data, []byte("\xef\xbb\xbf")) {
+		offset = 3
+	}
+	for offset < len(data) {
+		if line == targetLine && column == targetColumn {
+			return offset, nil
+		}
+		r, size := utf8.DecodeRune(data[offset:])
+		offset += size
+		switch r {
+		case '\r':
+			if offset < len(data) && data[offset] == '\n' {
+				offset++
+			}
+			line, column = line+1, 1
+		case '\n', '\u0085', '\u2028', '\u2029':
+			line, column = line+1, 1
+		default:
+			column++
+		}
+	}
+	return 0, fmt.Errorf("invalid YAML scalar position")
 }
 
 func tomlVersionReplacement(data []byte, keys []string, version string) (versionReplacement, error) {
@@ -388,6 +407,9 @@ func applyVersionReplacements(data []byte, replacements []versionReplacement) ([
 	end := 0
 	var previous versionReplacement
 	for i, replacement := range replacements {
+		if replacement.start < 0 || replacement.end > len(data) || replacement.end <= replacement.start {
+			return nil, fmt.Errorf("invalid version replacement range")
+		}
 		if i > 0 && replacement == previous {
 			continue
 		}
