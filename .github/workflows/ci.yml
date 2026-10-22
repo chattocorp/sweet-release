@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Go checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: packages/cli/go.mod
+          cache-dependency-path: |
+            packages/cli/go.sum
+            packages/core/go.sum
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l packages)
+          if [ -n "$unformatted" ]; then
+            printf 'Run gofmt on these files:\n%s\n' "$unformatted"
+            exit 1
+          fi
+      - name: Test with race detection
+        run: go test -race ./packages/cli/... ./packages/core/...
+      - name: Run static checks
+        run: go vet ./packages/cli/... ./packages/core/...
+      - name: Build CLI
+        run: go build -o bin/sweet ./packages/cli/cmd/sweet
