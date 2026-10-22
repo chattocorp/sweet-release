@@ -28,6 +28,12 @@ The equivalent Mise tasks are `mise run sweet -- list`, `mise run check`, and
 `mise run build`. Use `mise run deploy` to install `sweet` into `~/.local/bin`.
 The root has no Go module, so use the module patterns above instead of `go test ./...`.
 
+GitHub Actions runs CI on branch pushes and pull requests. It checks Go formatting,
+runs both modules' tests with race detection, runs `go vet`, and builds the CLI
+on Linux. You can also start the CI workflow manually from the Actions tab.
+To run the additional checks locally, use `gofmt -l packages` (no output means
+formatting is correct) and `go test -race ./packages/cli/... ./packages/core/...`.
+
 ## Releases
 
 Install the tools with `mise install`, then run these commands from the root:
