@@ -37,5 +37,7 @@ jobs:
         run: go test -race ./pkg/cli/... ./pkg/core/...
       - name: Run static checks
         run: go vet ./pkg/cli/... ./pkg/core/...
+      - name: Test release coordination
+        run: node --test .github/scripts/*.test.cjs
       - name: Build CLI
         run: go build -o bin/sweet ./pkg/cli/cmd/sweet

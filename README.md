@@ -6,6 +6,7 @@
 - Preview pending releases with `sweet status`.
 - Update package versions and generate changelogs with `sweet bump`.
 - Copy bumped versions into JSON, YAML, TOML, and plaintext files.
+- Inspect committed releases as JSON with `sweet release-plan`.
 - Use interactive pickers or explicit arguments and piped input.
 
 ## How it works

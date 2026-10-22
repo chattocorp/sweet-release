@@ -4,12 +4,12 @@ project_name: sweet
 
 before:
   hooks:
-    - go test ./packages/cli/... ./packages/core/...
-    - go vet ./packages/cli/... ./packages/core/...
+    - go test ./pkg/cli/... ./pkg/core/...
+    - go vet ./pkg/cli/... ./pkg/core/...
 
 builds:
   - id: sweet
-    dir: packages/cli
+    dir: pkg/cli
     main: ./cmd/sweet
     binary: sweet
     env:
@@ -40,6 +40,11 @@ checksum:
 
 release:
   prerelease: auto
+  use_existing_draft: true
+  replace_existing_artifacts: true
+  mode: replace
+  # Let GitHub choose latest by release chronology/SemVer, including on retries.
+  make_latest: legacy
 
 changelog:
   sort: asc
