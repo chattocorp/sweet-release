@@ -28,6 +28,39 @@ The equivalent Mise tasks are `mise run sweet -- list`, `mise run check`, and
 `mise run build`. Use `mise run deploy` to install `sweet` into `~/.local/bin`.
 The root has no Go module, so use the module patterns above instead of `go test ./...`.
 
+## Releases
+
+Install the tools with `mise install`, then run these commands from the root:
+
+```sh
+mise run release:check
+mise run release:snapshot
+```
+
+The snapshot runs tests and static checks, then creates archives and SHA-256
+checksums in `dist/` without publishing. It builds `sweet` for Linux, macOS,
+and Windows on amd64 and arm64. Windows archives use ZIP; the others use tar.gz.
+The binary's `--version` output contains the release or snapshot version.
+
+To publish a CLI release, update `packages/cli/.sweet.yml` to the intended
+version and commit it with the release changes. Once that commit and the release
+workflow are on GitHub, tag the commit and push the tag. For example:
+
+```sh
+git tag -a v0.1.0 -m "Release sweet v0.1.0"
+git push origin v0.1.0
+```
+
+The release workflow uses GoReleaser to run checks, build the archives, and
+publish a GitHub Release with checksums and a generated changelog. It uses the
+repository's built-in `GITHUB_TOKEN`. Tags such as `v0.1.0-rc.1` create prereleases.
+
+These `v*` tags version the CLI binaries. They do not publish the nested Go
+modules or change package manifests automatically. Go module releases need
+path-prefixed tags, such as `packages/core/v0.1.0`, which do not trigger this
+workflow. Prefixed release tags in GoReleaser itself require
+[GoReleaser Pro](https://goreleaser.com/customization/monorepo/).
+
 ## Package configuration
 
 Run `sweet init repo` to create repository configuration at the Git root.

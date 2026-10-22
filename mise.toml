@@ -1,5 +1,6 @@
 [tools]
 go = "1.27.3"
+goreleaser = "2.18.2"
 
 [tasks.sweet]
 description = "Run sweet from source (forwards CLI arguments)"
@@ -18,6 +19,14 @@ run = "go build -o bin/sweet ./packages/cli/cmd/sweet"
 [tasks.test]
 description = "Run Go tests"
 run = "go test ./packages/cli/... ./packages/core/..."
+
+[tasks."release:check"]
+description = "Validate the GoReleaser configuration"
+run = "goreleaser check"
+
+[tasks."release:snapshot"]
+description = "Build release archives locally without publishing"
+run = "goreleaser release --snapshot --clean"
 
 [tasks.check]
 description = "Run Go tests and static checks"
