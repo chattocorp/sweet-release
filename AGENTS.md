@@ -53,6 +53,14 @@ and uses `peter-evans/create-pull-request` to create or update one PR from
 `sweet/release` into `main`. All packages with pending bumps are included.
 The PR contains updated manifests, changelogs, configured version files, and
 deletions of consumed notes. Notes with no version effect alone do not create a PR.
+The fixed `sweet/release` branch reuses the open PR on each run. Do not add a
+`branch-suffix`, which would create separate PR branches. After merging or closing
+the PR, a later release can create a new PR.
+The PR description lists each package's target version and new changelog content,
+without previous release history. The workflow collects added changelog lines
+from `git diff` after `sweet bump`. It marks new changelogs with intent-to-add
+so first releases also appear in the diff, and writes the description outside
+the checkout.
 
 Each run regenerates the changes from `main`; it does not bump the previous
 release branch again. Make corrections through `main`, since edits to the

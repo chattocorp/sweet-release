@@ -39,19 +39,53 @@ jobs:
           go test -race ./pkg/cli/... ./pkg/core/...
           go vet ./pkg/cli/... ./pkg/core/...
           go build -o "$RUNNER_TEMP/sweet" ./pkg/cli/cmd/sweet
+      - name: Describe pending releases
+        run: |
+          # Include first-release changelogs in the diff without staging their contents.
+          while IFS= read -r -d '' path; do
+            git add --intent-to-add -- "$path"
+          done < <(git ls-files --others --exclude-standard -z -- CHANGELOG.md '**/CHANGELOG.md')
+
+          {
+            cat <<'BODY'
+          - Update package versions, changelogs, and configured version files with `sweet bump --all`.
+          - Consume pending notes to prepare the packages below for release.
+          - Verify formatting, Go race tests, static checks, and the CLI build before updating this PR.
+
+          Merging this PR only commits the prepared files; it does not tag or publish anything.
+          This branch and description are regenerated from `main`. Make corrections on `main`.
+          BODY
+
+            git -c core.quotePath=false diff --no-ext-diff --no-color --unified=0 -- CHANGELOG.md '**/CHANGELOG.md' |
+              awk '
+                /^\+\+\+ b\// {
+                  package = substr($0, 7)
+                  sub(/\/?CHANGELOG\.md$/, "", package)
+                  if (package == "") package = "."
+                  printf "\n## `%s`\n", package
+                  version = 0
+                  next
+                }
+                /^\+/ {
+                  line = substr($0, 2)
+                  if (!version && line == "# Changelog") next
+                  if (!version && line ~ /^## /) {
+                    printf "\nTarget version: **%s**\n", substr(line, 4)
+                    version = 1
+                    next
+                  }
+                  print line
+                }
+              '
+          } > "$RUNNER_TEMP/release-pr-body.md"
       - name: Create or update release PR
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: main
+          # Keep this branch fixed, without branch-suffix, to reuse the open PR.
           branch: sweet/release
           delete-branch: true
           commit-message: 'chore: prepare releases'
           title: 'chore: prepare releases'
-          body: |
-            - Prepare all pending package versions, changelogs, and configured version files with `sweet bump --all`.
-            - Consume the included release notes so these changes are ready to release.
-            - Verify formatting, Go race tests, static checks, and the CLI build before opening or updating this PR.
-
-            Merging this PR only commits the prepared files; it does not tag or publish anything.
-            This branch is regenerated from `main`. Make corrections on `main`, not on this branch.
+          body-path: ${{ runner.temp }}/release-pr-body.md
