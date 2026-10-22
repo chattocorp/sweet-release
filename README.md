@@ -151,10 +151,21 @@ calculate versions. `sweet bump` uses the sections to generate changelog entries
 ## Prepare a release
 
 ```sh
-sweet bump pkg/core   # Prepare one package from the repository root
-sweet bump            # Prepare the package in the current directory
-sweet bump --all       # Prepare all eligible packages from any directory
+sweet bump                    # Choose pending releases interactively
+sweet bump pkg/core pkg/cli   # Prepare multiple packages from the repository root
+sweet bump .                  # Prepare the package in the current directory
+sweet bump --all              # Prepare all eligible packages from any directory
 ```
+
+With no package arguments or `--all`, Sweet opens a searchable package picker.
+Only valid packages with a pending version bump appear. Each row shows the
+current version, next version, and bump. Type to fuzzy-filter, use the arrow
+keys to move, and press Space to toggle one or more packages. Selections remain
+selected when the filter changes. Press Enter to release the selected packages,
+or the highlighted package if none are selected. Esc or Ctrl+C cancels without
+changing files. Without a terminal, pass package paths or `--all`.
+Package paths are relative to the current directory. `--all` cannot be combined
+with package arguments.
 
 For each selected package that needs a version bump, the command updates
 `.sweet.yml`, creates or updates the package's `CHANGELOG.md`, and deletes the

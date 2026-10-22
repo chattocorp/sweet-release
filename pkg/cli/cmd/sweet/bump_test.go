@@ -84,15 +84,25 @@ func TestBumpWorkflow(t *testing.T) {
 	}
 	write("api/.sweet/fix.md", note("fix", "Fixed API."))
 	t.Chdir(filepath.Join(root, "api"))
-	invoke(0, "bump")
+	invoke(0, "bump", ".")
 	if got := read("CHANGELOG.md"); !strings.HasSuffix(got, strings.TrimPrefix(changelog, "# Changelog\n\n")) || !strings.Contains(got, "## 1.3.1\n\n### Fixes") {
 		t.Fatal(got)
 	}
 	t.Chdir(root)
 	write("broken/.sweet/a.md", note("fix", "Fixed."))
-	invoke(0, "bump", "--all")
+	invoke(0, "bump", "broken", "other", "broken")
 	read("other/.sweet/a.md")
 	if read("other/.sweet.yml") != "version: 0.1.0\n" {
 		t.Fatal("bumped notes with no version effect")
 	}
+	if out := invoke(0, "bump"); !strings.Contains(out, "No packages need a release") {
+		t.Fatal(out)
+	}
+	write("api/.sweet/next.md", note("fix", "Another fix."))
+	write("broken/.sweet/next.md", note("fix", "Another fix."))
+	invoke(0, "bump", "api", "broken")
+	if !strings.Contains(read("api/.sweet.yml"), "1.3.2") || !strings.Contains(read("broken/.sweet.yml"), "1.0.2") {
+		t.Fatal("multiple package arguments did not release both packages")
+	}
+	invoke(0, "bump", "--all")
 }
