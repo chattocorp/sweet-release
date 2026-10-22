@@ -3,6 +3,7 @@ package core
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go.yaml.in/yaml/v3"
 	"io"
@@ -30,12 +31,28 @@ func RepositoryRoot() (string, error) {
 
 // DiscoverPackages finds package manifests in a Git repository.
 func DiscoverPackages(root string) ([]Package, error) {
+	packages, problems, err := discoverPackages(root)
+	if err != nil {
+		return nil, err
+	}
+	var errs []error
+	for _, problem := range problems {
+		errs = append(errs, problem)
+	}
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+	return packages, nil
+}
+
+func discoverPackages(root string) ([]Package, []Problem, error) {
 	// Include tracked and new files, while respecting Git ignore rules.
 	output, err := exec.Command("git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z").Output()
 	if err != nil {
-		return nil, fmt.Errorf("discover package manifests: %w", err)
+		return nil, nil, fmt.Errorf("discover package manifests: %w", err)
 	}
 	var packages []Package
+	var problems []Problem
 	seen := make(map[string]bool)
 	for _, path := range strings.Split(string(output), "\x00") {
 		if filepath.Base(path) != ".sweet.yml" || seen[path] {
@@ -46,17 +63,17 @@ func DiscoverPackages(root string) ([]Package, error) {
 		if os.IsNotExist(err) {
 			continue
 		} // A tracked manifest may have been deleted locally.
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", path, err)
+		var version string
+		if err == nil {
+			version, err = readPackageVersion(content)
 		}
-		version, err := readPackageVersion(content)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", path, err)
+			problems = append(problems, Problem{Path: path, Message: err.Error()})
 		}
 		packages = append(packages, Package{Path: filepath.ToSlash(filepath.Dir(path)), Version: version})
 	}
 	sort.Slice(packages, func(i, j int) bool { return packages[i].Path < packages[j].Path })
-	return packages, nil
+	return packages, problems, nil
 }
 
 func readPackageVersion(content []byte) (string, error) {
