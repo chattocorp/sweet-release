@@ -1,5 +1,15 @@
 # Sweet Release Changelog
 
+## 0.2.0
+
+### Features
+
+- Use package display names in release headings and GitHub Release titles.
+
+- Publish CLI binary archives and checksums after version tagging, with release notes from the changelog and retry support for incomplete uploads.
+
+- Add `sweet status --json` for release automation.
+
 ## 0.1.0
 
 ### Fixes
