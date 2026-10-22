@@ -1,0 +1,24 @@
+[tools]
+go = "1.27.3"
+
+[tasks.sweet]
+description = "Run sweet from source (forwards CLI arguments)"
+dir = "{{config_root}}/cmd/sweet"
+run = "go run ."
+
+[tasks.deploy]
+description = "Install sweet into ~/.local/bin"
+env.GOBIN = "{{env.HOME}}/.local/bin"
+run = "go install ./cmd/sweet"
+
+[tasks.build]
+description = "Build the sweet CLI"
+run = "go build -o bin/sweet ./cmd/sweet"
+
+[tasks.test]
+description = "Run Go tests"
+run = "go test ./..."
+
+[tasks.check]
+description = "Run Go tests and static checks"
+run = ["go test ./...", "go vet ./..."]
