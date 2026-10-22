@@ -7,10 +7,10 @@ import (
 	"text/tabwriter"
 )
 
-func newListCommand() *cobra.Command {
+func newStatusCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List package paths and current versions in the repository",
+		Use:   "status",
+		Short: "Show package paths and current versions in the repository",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, err := core.RepositoryRoot()
