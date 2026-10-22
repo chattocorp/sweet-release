@@ -10,7 +10,7 @@ title: Discover releasable packages from local manifests
 ---
 ## Context
 
-A directory becomes a package by containing a sweet manifest. The manifest stores its current released version, metadata, and dependencies expressed as paths to other packages.
+A directory becomes a package by containing a `.sweet.yml` manifest. The manifest will store its current released version, metadata, and dependencies expressed as paths to other packages.
 
 ## Acceptance criteria
 
@@ -21,4 +21,4 @@ A directory becomes a package by containing a sweet manifest. The manifest store
 
 ## Design dependency
 
-Use the configuration format and path rules once agreed; exact filenames remain open.
+YAML filenames are agreed: `.sweet.yml` for packages and `.sweet.config.yml` for repository policy. Metadata fields and dependency-path rules remain open in gambb.
