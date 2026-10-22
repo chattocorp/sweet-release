@@ -30,4 +30,8 @@ then removes the consumed change files. It changes local files only: committing,
 tagging, and publishing are separate steps. Dependency propagation is not yet
 supported.
 
+This repository's [Release PR workflow](.github/workflows/release-pr.yml) runs
+`sweet bump --all` and keeps one preparation PR up to date as notes reach `main`.
+Merging that PR does not tag or publish packages.
+
 See [AGENTS.md](AGENTS.md) for development instructions and detailed behavior.

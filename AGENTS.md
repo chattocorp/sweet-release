@@ -45,6 +45,41 @@ formatting is correct) and `go test -race ./pkg/cli/... ./pkg/core/...`.
 
 ## Releases
 
+### Release PRs
+
+The `Release PR` workflow runs on pushes to `main` or manual dispatch on `main`.
+It checks out current `main`, runs `sweet bump --all`, verifies the changed tree,
+and uses `peter-evans/create-pull-request` to create or update one PR from
+`sweet/release` into `main`. All packages with pending bumps are included.
+The PR contains updated manifests, changelogs, configured version files, and
+deletions of consumed notes. Notes with no version effect alone do not create a PR.
+
+Each run regenerates the changes from `main`; it does not bump the previous
+release branch again. Make corrections through `main`, since edits to the
+generated branch can be overwritten. When there is no diff, the action creates
+no PR and closes an obsolete open PR. It also removes an unused release branch.
+After a release PR is merged, the next run either cleans up its branch or
+prepares the next pending release. Merging the PR does not tag or publish.
+
+One concurrency group serializes writers without cancelling an active update.
+A bump or verification failure stops before the PR action and leaves any
+existing PR unchanged. If GitHub fails after the branch is pushed, rerun the
+workflow to reconcile the PR. A subsequent run always starts from current main.
+
+The workflow uses `GITHUB_TOKEN` with `contents: write` and `pull-requests: write`.
+Enable **Allow GitHub Actions to create and approve pull requests** under
+Settings → Actions → General → Workflow permissions (organization policy must
+also allow it). According to [GitHub's workflow trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow),
+PR workflows created by this token require a maintainer to approve their runs.
+Use a GitHub App token in the PR action if unattended PR checks are needed.
+
+This workflow dogfoods the CLI from source. Other projects can use the same
+pattern with an installed `sweet` binary. Add project-specific commands, such
+as `pnpm install`, between the bump and verification/PR steps to include lockfile
+updates. No release-plan command, Git history scan, or publishing task is needed.
+
+### Existing CLI publishing
+
 The release workflow and `.goreleaser.yml` still reference the old `packages/`
 directory. These paths must be changed to `pkg/` before snapshot builds or
 publishing can succeed. The following describes the intended release workflow.
