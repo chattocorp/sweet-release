@@ -18,13 +18,13 @@ module commands resolve core when workspace mode is disabled.
 With the Go version from `mise.toml` installed, run these commands at the root:
 
 ```sh
-go run ./pkg/cli/cmd/sweet list
+go run ./pkg/cli/cmd/sweet status
 go test ./pkg/cli/... ./pkg/core/...
 go vet ./pkg/cli/... ./pkg/core/...
 go build -o bin/sweet ./pkg/cli/cmd/sweet
 ```
 
-The equivalent Mise tasks are `mise run sweet -- list`, `mise run check`, and
+The equivalent Mise tasks are `mise run sweet -- status`, `mise run check`, and
 `mise run build`. Use `mise run deploy` to install `sweet` into `~/.local/bin`.
 The root has no Go module, so use the module patterns above instead of `go test ./...`.
 
@@ -80,7 +80,7 @@ New package manifests start with:
 version: 0.0.0
 ```
 
-`sweet list` lists package paths and versions from anywhere in the repository.
+`sweet status` shows package paths and versions from anywhere in the repository.
 It includes nested packages and respects Git ignore rules for untracked files.
 Package names are not required. Dependency metadata is not yet implemented.
 

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestListPackages(t *testing.T) {
+func TestStatusPackages(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
 	if output, err := exec.Command("git", "init").CombinedOutput(); err != nil {
@@ -25,7 +25,7 @@ func TestListPackages(t *testing.T) {
 		}
 	}
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"list"}, &stdout, &stderr); code != 0 || stdout.String() != "No packages found.\n" {
+	if code := run([]string{"status"}, &stdout, &stderr); code != 0 || stdout.String() != "No packages found.\n" {
 		t.Fatalf("empty repository: %d, %s, %s", code, &stdout, &stderr)
 	}
 	write(".sweet.yml", "version: 0.1.0\n")
@@ -40,8 +40,8 @@ func TestListPackages(t *testing.T) {
 	write(".gitignore", "ignored/\n/.sweet.yml\n")
 	t.Chdir(filepath.Join(root, "pkg/api"))
 	stdout.Reset()
-	if code := run([]string{"list"}, &stdout, &stderr); code != 0 {
-		t.Fatalf("list: %d: %s", code, &stderr)
+	if code := run([]string{"status"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("status: %d: %s", code, &stderr)
 	}
 	want := "PACKAGE VERSION . 0.1.0 pkg/api 1.2.3 pkg/api/client 2.0.0-beta.1"
 	if got := strings.Join(strings.Fields(stdout.String()), " "); got != want {
@@ -49,7 +49,7 @@ func TestListPackages(t *testing.T) {
 	}
 	write(".sweet.yml", "{}\n")
 	stdout.Reset()
-	if code := run([]string{"list"}, &stdout, &stderr); code == 0 || !strings.Contains(stderr.String(), "pkg/api/.sweet.yml") || stdout.Len() != 0 {
+	if code := run([]string{"status"}, &stdout, &stderr); code == 0 || !strings.Contains(stderr.String(), "pkg/api/.sweet.yml") || stdout.Len() != 0 {
 		t.Fatalf("invalid manifest: %d, %s, %s", code, &stdout, &stderr)
 	}
 }
