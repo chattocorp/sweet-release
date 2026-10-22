@@ -42,6 +42,7 @@ release-pr:
 `sweet init repo` selects `per-package`. Existing configs that omit the setting
 keep combined PRs. After a preparation PR reaches `main` and CI passes, the
 tagging workflow creates `<package-directory>/v<version>` tags (or `v<version>`
-for a root package). Binary publishing is a separate step.
+for a root package). CLI releases then publish Linux, macOS, and Windows binaries
+with checksums on the repository's [Releases page](https://github.com/chattocorp/sweet-release/releases).
 
 See [AGENTS.md](AGENTS.md) for development instructions and detailed behavior.

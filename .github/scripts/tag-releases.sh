@@ -25,6 +25,10 @@ else
   echo 'No new release tags.'
 fi
 
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+  printf 'cli-releases=%s\n' "$(jq -c '[.[] | select(.package == "pkg/cli") | {tag: .name, commit: .commit}]' <<< "$plan")" >> "$GITHUB_OUTPUT"
+fi
+
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
   {
     printf '## Release tags\n\n'

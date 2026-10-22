@@ -98,7 +98,7 @@ branch names in this repository that have a bot-created PR targeting `main`;
 human-created open PRs and fork branches are left alone. Branches without any
 associated bot-created PR are also left alone. If `main` has changed during the
 run, cleanup waits for the next run. After merging, successful CI creates version
-tags as described below. Binary publishing remains separate.
+tags as described below. CLI tags then publish binary archives.
 
 One concurrency group serializes whole workflow runs without cancelling an active
 update. At most four package jobs run concurrently, each with a separate checkout.
@@ -159,17 +159,38 @@ none of that push's refs are updated. Rerunning the original CI run safely retri
 the original range after a failure; later pushes do not automatically backfill it.
 
 The job uses `GITHUB_TOKEN` with `contents: write`. Tags pushed by this token do not
-start other push-triggered workflows. Future publishing should be called explicitly
-or use a GitHub App token if tag events must trigger it. See
+start other push-triggered workflows. The tag job therefore calls publishing
+explicitly for each CLI tag in its plan. See
 [GitHub's workflow trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
 The local tests use temporary repositories and a bare remote to verify annotated
 tags, reruns, conflicts, atomic rejection, and recovery without contacting GitHub.
 
-### Existing CLI publishing
+### CLI publishing
 
-The release workflow and `.goreleaser.yml` still reference the old `packages/`
-directory. These paths must be changed to `pkg/` before snapshot builds or
-publishing can succeed. The following describes the intended release workflow.
+After tags are pushed, the tag workflow calls `.github/workflows/release.yml`
+for each `pkg/cli` release in the plan. Core-only releases do not build binaries.
+Each job checks out the exact tag commit and verifies it against the planner's
+commit. Jobs for the same tag are serialized. Publishing failures leave tags
+intact; rerunning CI retries publishing, including tags that already exist.
+
+The workflow keeps its own build configuration and script when checking out an
+older tag. You can publish or retry an existing CLI tag from main manually:
+
+```sh
+gh workflow run release.yml --ref main -f tag=pkg/cli/v0.1.0
+```
+
+GoReleaser's free edition builds archives in snapshot mode with an explicit
+release version, avoiding its Pro-only support for prefixed tags. GitHub CLI
+publishes the artifacts against the existing `pkg/cli/v<version>` tag. No extra
+tags are created. The job checks the Linux binary's version and archive checksums
+before upload. Release notes come from that version's CLI changelog section.
+
+Uploads go to a draft release, which is published only after all uploads succeed.
+A retry replaces assets in an unfinished draft; an already published release is
+left unchanged. API errors stop the job. Prerelease versions produce GitHub
+prereleases. The workflow does not move GitHub's Latest designation, so publishing
+an older tag cannot replace a newer release's designation.
 
 Install the tools with `mise install`, then run these commands from the root:
 
@@ -184,26 +205,13 @@ and Windows on amd64 and arm64. Windows archives use ZIP; the others use tar.gz.
 The binary's `--version` output contains the release or snapshot version.
 Local builds default to `cli.Version` in `pkg/cli/version.go`. The CLI package's
 `version-files` entry updates its annotated constant during `sweet bump`.
-The existing `-X main.version=...` linker option overrides the displayed version
+The `-X main.version=...` linker option overrides the displayed version
 for release and snapshot builds.
 
-To publish a CLI release, update `pkg/cli/.sweet.yml` to the intended
-version and commit it with the release changes. Once that commit and the release
-workflow are on GitHub, tag the commit and push the tag. For example:
-
-```sh
-git tag -a v0.1.0 -m "Release sweet v0.1.0"
-git push origin v0.1.0
-```
-
-The release workflow uses GoReleaser to run checks, build the archives, and
-publish a GitHub Release with checksums and a generated changelog. It uses the
-repository's built-in `GITHUB_TOKEN`. Tags such as `v0.1.0-rc.1` create prereleases.
-
-These `v*` tags version the CLI binaries. They do not publish the nested Go
-modules or change package manifests automatically. Go module releases need
-path-prefixed tags, such as `pkg/core/v0.1.0`, which do not trigger this
-workflow.
+Local snapshots use `0.0.0-SNAPSHOT-<commit>` and never publish. CI supplies
+`SWEET_RELEASE_VERSION` from the CLI tag for release archives. Both builds run
+tests and static checks. Publishing uses the repository's `GITHUB_TOKEN` with
+`contents: write`; no additional credential is required.
 
 ## Package configuration
 

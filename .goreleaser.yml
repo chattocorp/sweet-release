@@ -4,12 +4,12 @@ project_name: sweet
 
 before:
   hooks:
-    - go test ./packages/cli/... ./packages/core/...
-    - go vet ./packages/cli/... ./packages/core/...
+    - go test ./pkg/cli/... ./pkg/core/...
+    - go vet ./pkg/cli/... ./pkg/core/...
 
 builds:
   - id: sweet
-    dir: packages/cli
+    dir: pkg/cli
     main: ./cmd/sweet
     binary: sweet
     env:
@@ -38,8 +38,8 @@ archives:
 checksum:
   name_template: checksums.txt
 
-release:
-  prerelease: auto
+snapshot:
+  version_template: '{{ if index .Env "SWEET_RELEASE_VERSION" }}{{ .Env.SWEET_RELEASE_VERSION }}{{ else }}0.0.0-SNAPSHOT-{{ .ShortCommit }}{{ end }}'
 
 changelog:
-  sort: asc
+  disable: true

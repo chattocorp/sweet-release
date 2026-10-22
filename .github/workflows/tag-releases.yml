@@ -18,6 +18,8 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      cli-releases: ${{ steps.tags.outputs.cli-releases }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,6 +32,7 @@ jobs:
             pkg/cli/go.sum
             pkg/core/go.sum
       - name: Create release tags
+        id: tags
         env:
           BASE: ${{ inputs.base }}
           HEAD: ${{ inputs.head }}
@@ -38,3 +41,15 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           bash .github/scripts/tag-releases.sh "$RUNNER_TEMP/sweet" "$BASE" "$HEAD"
+
+  publish:
+    needs: tag
+    if: needs.tag.outputs.cli-releases != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.tag.outputs.cli-releases) }}
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ matrix.tag }}
+      commit: ${{ matrix.commit }}
