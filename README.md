@@ -40,6 +40,8 @@ release-pr:
 ```
 
 `sweet init repo` selects `per-package`. Existing configs that omit the setting
-keep combined PRs. Merging a preparation PR does not tag or publish packages.
+keep combined PRs. After a preparation PR reaches `main` and CI passes, the
+tagging workflow creates `<package-directory>/v<version>` tags (or `v<version>`
+for a root package). Binary publishing is a separate step.
 
 See [AGENTS.md](AGENTS.md) for development instructions and detailed behavior.

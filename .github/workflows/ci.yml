@@ -10,8 +10,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Every main push owns a commit range that must reach tagging. Do not coalesce
+  # those runs; branch and PR checks can still replace obsolete runs.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || 'latest' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   check:
@@ -39,3 +41,13 @@ jobs:
         run: go vet ./pkg/cli/... ./pkg/core/...
       - name: Build CLI
         run: go build -o bin/sweet ./pkg/cli/cmd/sweet
+
+  tag:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/tag-releases.yml
+    with:
+      base: ${{ github.event.before }}
+      head: ${{ github.sha }}

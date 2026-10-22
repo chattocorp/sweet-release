@@ -1,0 +1,40 @@
+name: Tag releases
+
+on:
+  workflow_call:
+    inputs:
+      base:
+        required: true
+        type: string
+      head:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.head }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: pkg/cli/go.mod
+          cache-dependency-path: |
+            pkg/cli/go.sum
+            pkg/core/go.sum
+      - name: Create release tags
+        env:
+          BASE: ${{ inputs.base }}
+          HEAD: ${{ inputs.head }}
+        run: |
+          go build -o "$RUNNER_TEMP/sweet" ./pkg/cli/cmd/sweet
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          bash .github/scripts/tag-releases.sh "$RUNNER_TEMP/sweet" "$BASE" "$HEAD"

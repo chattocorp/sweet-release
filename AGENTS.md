@@ -97,7 +97,8 @@ packages, merged PRs, and switching strategies. Cleanup only acts on the reserve
 branch names in this repository that have a bot-created PR targeting `main`;
 human-created open PRs and fork branches are left alone. Branches without any
 associated bot-created PR are also left alone. If `main` has changed during the
-run, cleanup waits for the next run. Merging a PR does not tag or publish.
+run, cleanup waits for the next run. After merging, successful CI creates version
+tags as described below. Binary publishing remains separate.
 
 One concurrency group serializes whole workflow runs without cancelling an active
 update. At most four package jobs run concurrently, each with a separate checkout.
@@ -119,6 +120,50 @@ pattern with an installed `sweet` binary. Add project-specific commands, such
 as `pnpm install`, between the bump and verification/PR steps to include lockfile
 updates. The planning command supplies the job matrix; no Git history scan or
 publishing task is needed.
+
+### Version tags
+
+On pushes to `main`, CI calls `.github/workflows/tag-releases.yml` after Go checks
+succeed. It checks out the exact pushed SHA, fetches tags, and runs the Go tag
+planner through `.github/scripts/tag-releases.sh`. Pull requests, other branches,
+and manual CI dispatches do not create tags. Each main push has its own concurrency
+group so a later push cannot cancel a range before tagging. Separate runs can push
+different tags concurrently; a competing write to the same tag fails without force.
+
+`sweet tags plan --base <before-sha> --head <after-sha>` prints a JSON array with
+`package`, `version`, `name`, `commit`, and `exists` fields. It reads committed
+manifests, not working files, and makes no Git changes or network requests. Fetch
+remote tags before invoking it if existing-tag checks must include remote state.
+Use a full-history checkout. The base must be on the head's first-parent history;
+rewritten or unrelated histories are rejected.
+
+Each version change produces `<directory>/v<version>` at the commit that introduces
+it to the first-parent history. A root package uses `v<version>`. For example,
+`pkg/core` at `0.1.0` gets `pkg/core/v0.1.0`. A merge commit is compared with its first
+parent, so intermediate versions on an unmerged feature branch are not released.
+Multiple release commits within one push retain their individual tag targets.
+CI verifies the pushed tip; it does not separately test every intermediate commit.
+
+Unchanged versions, pending notes, deleted packages, and `0.0.0` versions produce
+no tags. A newly added manifest above `0.0.0` is eligible. For an all-zero base
+(initial branch creation), only the head snapshot is considered; older versions
+are not backfilled. Manual version edits on main are treated like prepared releases.
+Package paths must produce valid Git tag names; for example, paths containing spaces
+cannot be tagged with this convention. Tag customization is not implemented.
+
+The script creates annotated tags and pushes only the planned refs with
+`git push --atomic`. Matching existing tags are retained, including lightweight
+tags. A tag targeting another commit or a version reused within the range stops
+the operation. Tags are never moved or overwritten. If a remote rejects any tag,
+none of that push's refs are updated. Rerunning the original CI run safely retries
+the original range after a failure; later pushes do not automatically backfill it.
+
+The job uses `GITHUB_TOKEN` with `contents: write`. Tags pushed by this token do not
+start other push-triggered workflows. Future publishing should be called explicitly
+or use a GitHub App token if tag events must trigger it. See
+[GitHub's workflow trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
+The local tests use temporary repositories and a bare remote to verify annotated
+tags, reruns, conflicts, atomic rejection, and recovery without contacting GitHub.
 
 ### Existing CLI publishing
 
