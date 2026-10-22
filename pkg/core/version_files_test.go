@@ -190,11 +190,23 @@ func TestVersionFilePathBoundaries(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"../outside", ".git/config", ".sweet.yml", ".sweet.config.yml", "CHANGELOG.md", ".sweet/note.md", "link", "missing"} {
-		manifest := []byte("version-files: [{path: " + path + ", format: text}]")
-		if err := planVersionFiles(root, PackageStatus{Package: Package{Path: "."}, NextVersion: "2.0.0"}, manifest, map[string]*versionFilePlan{}); err == nil {
-			t.Errorf("accepted %s", path)
-		}
+	for _, tt := range []struct{ path, want string }{
+		{"../outside", "version-file path must stay inside the repository"},
+		{".git/config", "version-file target is reserved for Git or Sweet"},
+		{".sweet.yml", "version-file target is reserved for Git or Sweet"},
+		{".sweet.config.yml", "version-file target is reserved for Git or Sweet"},
+		{"CHANGELOG.md", "version-file target is reserved for Git or Sweet"},
+		{".sweet/note.md", "version-file target is reserved for Git or Sweet"},
+		{"link", "version-file paths must not contain symlinks"},
+		{"missing", "no such file or directory"},
+	} {
+		t.Run(tt.path, func(t *testing.T) {
+			manifest := []byte("version: 1.2.3\nversion-files: [{path: " + tt.path + ", format: text}]")
+			err := planVersionFiles(root, PackageStatus{Package: Package{Path: "."}, NextVersion: "2.0.0"}, manifest, map[string]*versionFilePlan{})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("expected %q, got %v", tt.want, err)
+			}
+		})
 	}
 }
 

@@ -125,3 +125,54 @@ func TestRepositoryStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestRepositoryStatusManifestInventory(t *testing.T) {
+	root := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		if output, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git: %v: %s", err, output)
+		}
+	}
+	write := func(path, content string) {
+		t.Helper()
+		path = filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git("init")
+	write("tracked/.sweet.yml", "version: 1.2.3\n")
+	write("deleted/.sweet.yml", "version: 1.2.3\n")
+	git("add", ".")
+	if err := os.Remove(filepath.Join(root, "deleted/.sweet.yml")); err != nil {
+		t.Fatal(err)
+	}
+	// Ignore tracked manifests as well: Git must still include them.
+	write(".gitignore", ".sweet.yml\n")
+	write("ignored/.sweet.yml", "version: invalid\n")
+	// An untracked package that is not ignored must still be included.
+	write("fresh/.gitignore", "!.sweet.yml\n")
+	write("fresh/.sweet.yml", "version: 2.0.0\n")
+	write("broken/.gitignore", "!.sweet.yml\n")
+	write("broken/.sweet.yml", "version: 1.2.3-01\n")
+	statuses, err := RepositoryStatus(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(statuses) != 3 || statuses[0].Path != "broken" || statuses[1].Path != "fresh" || statuses[2].Path != "tracked" {
+		t.Fatalf("unexpected packages: %#v", statuses)
+	}
+	broken := statuses[0]
+	if broken.Bump != "" || broken.NextVersion != "" || len(broken.Problems) != 1 || broken.Problems[0].Path != "broken/.sweet.yml" || !strings.Contains(broken.Problems[0].Message, "invalid semantic version") {
+		t.Fatalf("invalid package status: %#v", broken)
+	}
+	for _, status := range statuses[1:] {
+		if len(status.Problems) != 0 || status.Bump != "none" || status.NextVersion != status.Version {
+			t.Fatalf("invalid manifest affected another package: %#v", status)
+		}
+	}
+}
