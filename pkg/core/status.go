@@ -171,8 +171,8 @@ func parseChange(data []byte) (Change, error) {
 		return change, fmt.Errorf("missing closing --- for YAML frontmatter")
 	}
 	var metadata struct {
-		Type     string `yaml:"type"`
-		Breaking bool   `yaml:"breaking"`
+		Type     yaml.Node `yaml:"type"`
+		Breaking yaml.Node `yaml:"breaking"`
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(bytes.Join(lines[1:end], nil)))
 	decoder.KnownFields(true)
@@ -183,10 +183,18 @@ func parseChange(data []byte) (Change, error) {
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return change, fmt.Errorf("expected one YAML frontmatter document")
 	}
-	if metadata.Type == "" {
-		return change, fmt.Errorf("change type is required")
+	if metadata.Type.Kind != yaml.ScalarNode || metadata.Type.Tag != "!!str" || strings.TrimSpace(metadata.Type.Value) == "" {
+		return change, fmt.Errorf("change type must be a non-empty string")
 	}
-	change.Type, change.Breaking = metadata.Type, metadata.Breaking
+	if metadata.Breaking.Kind != 0 {
+		if metadata.Breaking.Kind != yaml.ScalarNode || metadata.Breaking.Tag != "!!bool" {
+			return change, fmt.Errorf("breaking must be true or false")
+		}
+		if err := metadata.Breaking.Decode(&change.Breaking); err != nil {
+			return change, fmt.Errorf("decode breaking: %w", err)
+		}
+	}
+	change.Type = metadata.Type.Value
 	change.Body = string(bytes.Join(lines[end+1:], nil))
 	return change, nil
 }

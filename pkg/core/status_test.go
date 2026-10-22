@@ -44,6 +44,9 @@ func TestParseChange(t *testing.T) {
 		"---\nbreaking: true\n---\n", "---\ntype: fix\nunknown: true\n---\n",
 		"---\ntype: [fix]\n---\n", "---\ntype: fix\nbreaking: perhaps\n---\n",
 		"---\ntype: fix\ntype: chore\n---\n",
+		"---\ntype: fix\nbreaking: null\n---\n",
+		"---\ntype: fix\nbreaking: yes\n---\n",
+		"---\ntype: 123\n---\n",
 	} {
 		if _, err := parseChange([]byte(data)); err == nil {
 			t.Errorf("accepted %q", data)
