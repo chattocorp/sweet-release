@@ -8,7 +8,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -133,9 +135,31 @@ func parseChangeTypes(data []byte) ([]ChangeType, error) {
 	return config.ChangeTypes, err
 }
 
+var defaultPolicyCache struct {
+	sync.Once
+	types []ChangeType
+	err   error
+}
+
+func defaultChangeTypes() ([]ChangeType, error) {
+	defaultPolicyCache.Do(func() {
+		nodes, err := decodeRepositoryConfig([]byte(defaultRepositoryConfig))
+		if err != nil {
+			defaultPolicyCache.err = err
+			return
+		}
+		if nodes.Types.Kind == 0 {
+			defaultPolicyCache.err = fmt.Errorf("default repository configuration must define types")
+			return
+		}
+		defaultPolicyCache.types, defaultPolicyCache.err = changeTypes(nodes.Types)
+	})
+	return slices.Clone(defaultPolicyCache.types), defaultPolicyCache.err
+}
+
 func changeTypes(typeNode yaml.Node) ([]ChangeType, error) {
 	if typeNode.Kind == 0 {
-		return []ChangeType{{"fix", "minor", "Fixes"}, {"feature", "minor", "Features"}, {"chore", "none", ""}, {"refactor", "none", ""}, {"performance", "patch", "Performance"}}, nil
+		return defaultChangeTypes()
 	}
 	if typeNode.Kind != yaml.MappingNode || len(typeNode.Content) == 0 {
 		return nil, fmt.Errorf("types must be a non-empty mapping, for example: types: {fix: {bump: minor, section: Fixes}}")

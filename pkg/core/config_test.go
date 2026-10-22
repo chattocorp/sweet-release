@@ -10,18 +10,24 @@ import (
 )
 
 func TestRepositoryConfig(t *testing.T) {
+	defaults, err := parseRepositoryConfig([]byte(defaultRepositoryConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct{ data, strategy string }{
 		{"{}", "combined"},
 		{"release-pr: {}", "combined"},
 		{defaultRepositoryConfig, "per-package"},
 	} {
 		config, err := parseRepositoryConfig([]byte(tc.data))
-		if err != nil || config.ReleasePRStrategy != tc.strategy || len(config.ChangeTypes) != 5 {
+		if err != nil || config.ReleasePRStrategy != tc.strategy || !reflect.DeepEqual(config.ChangeTypes, defaults.ChangeTypes) {
 			t.Fatalf("config = %+v, error = %v", config, err)
 		}
-		config.ChangeTypes[0].Name = "changed"
+		for i := range config.ChangeTypes {
+			config.ChangeTypes[i] = ChangeType{"changed", "major", "Changed"}
+		}
 		fresh, err := parseRepositoryConfig([]byte(tc.data))
-		if err != nil || fresh.ChangeTypes[0].Name != "fix" {
+		if err != nil || !reflect.DeepEqual(fresh.ChangeTypes, defaults.ChangeTypes) {
 			t.Fatalf("defaults were shared: %+v, %v", fresh, err)
 		}
 	}
