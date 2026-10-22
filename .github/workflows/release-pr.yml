@@ -9,16 +9,19 @@ permissions:
   contents: write
   pull-requests: write
 
-# One writer owns the release branch. A queued run starts from current main.
+# Serialize whole runs, including cleanup. A queued run starts from current main.
 concurrency:
   group: release-pr-main
   cancel-in-progress: false
 
 jobs:
-  prepare:
+  plan:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+    outputs:
+      prs: ${{ steps.plan.outputs.prs }}
+      sha: ${{ steps.plan.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -29,8 +32,42 @@ jobs:
           cache-dependency-path: |
             pkg/cli/go.sum
             pkg/core/go.sum
+      - name: Plan release PRs
+        id: plan
+        run: |
+          prs=$(go run ./pkg/cli/cmd/sweet release-pr plan)
+          # GitHub limits a job matrix to 256 entries.
+          jq -e 'length <= 256' <<< "$prs" > /dev/null
+          printf 'prs=%s\n' "$prs" >> "$GITHUB_OUTPUT"
+          printf 'sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  prepare:
+    needs: plan
+    if: needs.plan.outputs.prs != '[]'
+    name: ${{ matrix.title }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.prs) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: pkg/cli/go.mod
+          cache-dependency-path: |
+            pkg/cli/go.sum
+            pkg/core/go.sum
       - name: Prepare pending releases
-        run: go run ./pkg/cli/cmd/sweet bump --all
+        env:
+          PACKAGES: ${{ toJSON(matrix.packages) }}
+        run: |
+          mapfile -d '' -t packages < <(jq -j '.[] | ., "\u0000"' <<< "$PACKAGES")
+          go run ./pkg/cli/cmd/sweet bump -- "${packages[@]}"
       # Project-specific steps, such as regenerating lockfiles, belong here.
       - name: Verify prepared changes
         run: |
@@ -76,9 +113,34 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: main
-          # Keep this branch fixed, without branch-suffix, to reuse the open PR.
-          branch: sweet/release
+          # The planner assigns stable branches so each open PR is reused.
+          branch: ${{ matrix.branch }}
           delete-branch: true
           commit-message: 'chore: prepare releases'
-          title: 'chore: prepare releases'
+          title: ${{ matrix.title }}
           body-path: ${{ runner.temp }}/release-pr-body.md
+
+  cleanup:
+    needs: [plan, prepare]
+    if: >-
+      always() && !cancelled() && needs.plan.result == 'success' &&
+      (needs.prepare.result == 'success' ||
+       (needs.prepare.result == 'skipped' && needs.plan.outputs.prs == '[]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - name: Remove obsolete release PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_PRS: ${{ needs.plan.outputs.prs }}
+          PLANNED_SHA: ${{ needs.plan.outputs.sha }}
+        run: |
+          current=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [[ "$current" != "$PLANNED_SHA" ]]; then
+            echo 'Main changed during this run; leave cleanup to the next run.'
+            exit 0
+          fi
+          bash .github/scripts/cleanup-release-prs.sh

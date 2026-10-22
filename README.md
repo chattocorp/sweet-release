@@ -31,7 +31,15 @@ tagging, and publishing are separate steps. Dependency propagation is not yet
 supported.
 
 This repository's [Release PR workflow](.github/workflows/release-pr.yml) runs
-`sweet bump --all` and keeps one preparation PR up to date as notes reach `main`.
-Merging that PR does not tag or publish packages.
+Sweet as notes reach `main` and keeps release preparation PRs up to date.
+Choose one PR per package or one combined PR in `.sweet.config.yml`:
+
+```yaml
+release-pr:
+  strategy: per-package # or combined
+```
+
+`sweet init repo` selects `per-package`. Existing configs that omit the setting
+keep combined PRs. Merging a preparation PR does not tag or publish packages.
 
 See [AGENTS.md](AGENTS.md) for development instructions and detailed behavior.

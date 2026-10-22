@@ -1,4 +1,6 @@
 # Sweet repository configuration
+release-pr:
+  strategy: per-package
 types:
   fix:
     bump: minor

@@ -14,6 +14,8 @@ import (
 )
 
 const defaultRepositoryConfig = `# Sweet repository configuration
+release-pr:
+  strategy: per-package
 types:
   fix:
     bump: minor
@@ -53,16 +55,9 @@ func ChangeTypes(dir string) ([]string, error) {
 
 // LoadChangeTypes loads release policies in their configured display order.
 func LoadChangeTypes(dir string) ([]ChangeType, error) {
-	root := dir
-	if output, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output(); err == nil {
-		root = strings.TrimSuffix(string(output), "\n")
-	}
-	path := filepath.Join(root, ".sweet.config.yml")
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		data = []byte(defaultRepositoryConfig)
-	} else if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
+	data, path, err := loadRepositoryConfig(dir)
+	if err != nil {
+		return nil, err
 	}
 	types, err := parseChangeTypes(data)
 	if err != nil {
@@ -71,7 +66,25 @@ func LoadChangeTypes(dir string) ([]ChangeType, error) {
 	return types, nil
 }
 
+func loadRepositoryConfig(dir string) ([]byte, string, error) {
+	root := dir
+	if output, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output(); err == nil {
+		root = strings.TrimSuffix(string(output), "\n")
+	}
+	path := filepath.Join(root, ".sweet.config.yml")
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		data = []byte("{}")
+	} else if err != nil {
+		return nil, path, fmt.Errorf("read %s: %w", path, err)
+	}
+	return data, path, nil
+}
+
 func parseChangeTypes(data []byte) ([]ChangeType, error) {
+	if _, err := parseReleasePRStrategy(data); err != nil {
+		return nil, err
+	}
 	var config struct {
 		Types yaml.Node `yaml:"types"`
 	}

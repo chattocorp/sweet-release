@@ -48,31 +48,64 @@ formatting is correct) and `go test -race ./pkg/cli/... ./pkg/core/...`.
 ### Release PRs
 
 The `Release PR` workflow runs on pushes to `main` or manual dispatch on `main`.
-It checks out current `main`, runs `sweet bump --all`, verifies the changed tree,
-and uses `peter-evans/create-pull-request` to create or update one PR from
-`sweet/release` into `main`. All packages with pending bumps are included.
+It reads current `main` with `sweet release-pr plan`, then uses independent
+checkouts of that commit to bump and verify each planned PR. It uses
+`peter-evans/create-pull-request` to create or update PRs into `main`.
+Configure the strategy in `.sweet.config.yml`:
+
+```yaml
+release-pr:
+  strategy: per-package # or combined
+```
+
+`sweet init repo` writes `per-package`. Missing configuration, an omitted
+`release-pr` setting, or an omitted `strategy` preserves `combined` behavior.
+Unknown settings within `release-pr` and invalid strategies are errors.
+
+With `combined`, all packages with pending bumps share the `sweet/release` PR.
+With `per-package`, each eligible package has its own PR. Its branch uses
+`sweet/release-package-<path-slug>-<path-hash>` so root packages, nested paths,
+and paths with spaces have stable, distinct branch names. Branch names do not
+include versions; new notes and versions update the existing open PR.
+Both strategies exclude packages with no version bump.
+
+`sweet release-pr plan` prints a JSON array of objects with `branch`, `title`,
+and `packages` fields. Paths are repository-relative. It works from any directory
+in the repository and does not change files or contact GitHub. No releases produce
+`[]`. Invalid packages or version targets fail planning before any PR is updated.
+Per-package mode rejects overlapping version tokens shared by pending packages,
+even when both would write the same version; use combined mode for these releases.
+Different fields in a shared file are allowed, but their PRs can have Git conflicts
+until the next run regenerates them from `main`. Dependency propagation is not
+implemented; selecting per-package mode does not coordinate dependent releases.
+
 The PR contains updated manifests, changelogs, configured version files, and
 deletions of consumed notes. Notes with no version effect alone do not create a PR.
-The fixed `sweet/release` branch reuses the open PR on each run. Do not add a
-`branch-suffix`, which would create separate PR branches. After merging or closing
-the PR, a later release can create a new PR.
+Do not add a `branch-suffix`, which would create separate PR branches on each run.
+After merging or closing a PR, a later release can create a new PR.
 The PR description lists each package's target version and new changelog content,
 without previous release history. The workflow collects added changelog lines
 from `git diff` after `sweet bump`. It marks new changelogs with intent-to-add
 so first releases also appear in the diff, and writes the description outside
 the checkout.
 
-Each run regenerates the changes from `main`; it does not bump the previous
-release branch again. Make corrections through `main`, since edits to the
-generated branch can be overwritten. When there is no diff, the action creates
-no PR and closes an obsolete open PR. It also removes an unused release branch.
-After a release PR is merged, the next run either cleans up its branch or
-prepares the next pending release. Merging the PR does not tag or publish.
+Each run regenerates changes from `main`; it does not bump previous release
+branches again. Make corrections through `main`, since edits to generated branches
+can be overwritten. After all PR jobs succeed, cleanup closes obsolete bot-created
+release PRs and deletes their branches. This handles consumed notes, removed
+packages, merged PRs, and switching strategies. Cleanup only acts on the reserved
+branch names in this repository that have a bot-created PR targeting `main`;
+human-created open PRs and fork branches are left alone. Branches without any
+associated bot-created PR are also left alone. If `main` has changed during the
+run, cleanup waits for the next run. Merging a PR does not tag or publish.
 
-One concurrency group serializes writers without cancelling an active update.
-A bump or verification failure stops before the PR action and leaves any
-existing PR unchanged. If GitHub fails after the branch is pushed, rerun the
-workflow to reconcile the PR. A subsequent run always starts from current main.
+One concurrency group serializes whole workflow runs without cancelling an active
+update. At most four package jobs run concurrently, each with a separate checkout.
+A bump or verification failure leaves that package's PR unchanged; other package
+jobs can still succeed. Cleanup is skipped if any preparation job fails, so switching
+strategies retains the old PRs until all replacements succeed. Rerun after a GitHub
+failure to reconcile the PRs. A subsequent run always starts from current `main`.
+The workflow rejects plans above GitHub's limit of 256 matrix entries.
 
 The workflow uses `GITHUB_TOKEN` with `contents: write` and `pull-requests: write`.
 Enable **Allow GitHub Actions to create and approve pull requests** under
@@ -84,7 +117,8 @@ Use a GitHub App token in the PR action if unattended PR checks are needed.
 This workflow dogfoods the CLI from source. Other projects can use the same
 pattern with an installed `sweet` binary. Add project-specific commands, such
 as `pnpm install`, between the bump and verification/PR steps to include lockfile
-updates. No release-plan command, Git history scan, or publishing task is needed.
+updates. The planning command supplies the job matrix; no Git history scan or
+publishing task is needed.
 
 ### Existing CLI publishing
 
@@ -173,6 +207,8 @@ Package names are not required. Dependency propagation is not yet implemented.
 `sweet init repo` starts `.sweet.config.yml` with:
 
 ```yaml
+release-pr:
+  strategy: per-package
 types:
   fix:
     bump: minor
