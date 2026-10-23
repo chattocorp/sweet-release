@@ -41,15 +41,10 @@ process.
 
 This repository's [Release PR workflow](.github/workflows/release-pr.yml) runs
 Sweet as notes reach `main` and keeps release preparation PRs up to date.
-Choose one PR per package or one combined PR in `.sweet.config.yml`:
-
-```yaml
-release-pr:
-  strategy: per-package # or combined
-```
-
-`sweet init repo` selects `per-package`. Existing configs that omit the setting
-keep combined PRs. After a preparation PR reaches `main` and CI passes, the
+It lists packages with `sweet status --json`, runs `sweet bump` in clean checkouts,
+and creates PRs only when files change. Set `RELEASE_PR_STRATEGY` in the workflow
+to `per-package` (the default) or `combined`; PR policy is not part of Sweet's
+configuration. After a preparation PR reaches `main` and CI passes, the
 tagging workflow creates `<package-directory>/v<version>` tags (or `v<version>`
 for a root package). CLI releases then publish Linux, macOS, and Windows binaries
 with checksums on the repository's [Releases page](https://github.com/chattocorp/sweet-release/releases).

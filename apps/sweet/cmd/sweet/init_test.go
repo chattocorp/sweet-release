@@ -47,8 +47,8 @@ func TestInitLocations(t *testing.T) {
 			}
 			if content, err := os.ReadFile(path); err != nil || len(content) == 0 {
 				t.Fatalf("config content = %q, error = %v", content, err)
-			} else if args[1] == "repo" && !strings.Contains(string(content), "release-pr:\n  strategy: per-package\n") {
-				t.Fatalf("repository config should select per-package PRs: %s", content)
+			} else if args[1] == "repo" && !strings.Contains(string(content), "types:\n") {
+				t.Fatalf("repository config should define change types: %s", content)
 			}
 			// A second invocation must preserve user configuration.
 			const existing = "custom: value\n"

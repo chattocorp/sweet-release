@@ -8,8 +8,6 @@ description: Configure change types, packages, and version file updates.
 `sweet init repo` creates `.sweet.config.yml` at the Git root:
 
 ```yaml
-release-pr:
-  strategy: per-package
 types:
   fix:
     bump: minor
@@ -38,9 +36,9 @@ Types with the same section share a heading. An empty or null section also
 excludes the type from the changelog without changing its bump.
 
 Missing repository configuration or an omitted `types` field uses the built-in
-types above. An omitted release PR strategy uses `combined`; repository
-initialization explicitly writes `per-package`. Unknown settings within
-`release-pr`, invalid strategies, and invalid type definitions are errors.
+types above. Invalid type definitions are errors. Pull request policy belongs to
+your automation, not Sweet's configuration. The former `release-pr` setting is
+no longer used and can be removed from existing configuration files.
 
 ## Package manifest
 

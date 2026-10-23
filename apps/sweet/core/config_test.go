@@ -14,32 +14,27 @@ func TestRepositoryConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range []struct{ data, strategy string }{
-		{"{}", "combined"},
-		{"release-pr: {}", "combined"},
-		{defaultRepositoryConfig, "per-package"},
-	} {
-		config, err := parseRepositoryConfig([]byte(tc.data))
-		if err != nil || config.ReleasePRStrategy != tc.strategy || !reflect.DeepEqual(config.ChangeTypes, defaults.ChangeTypes) {
+	for _, data := range []string{"{}", defaultRepositoryConfig, "release-pr: {strategy: obsolete}"} {
+		config, err := parseRepositoryConfig([]byte(data))
+		if err != nil || !reflect.DeepEqual(config.ChangeTypes, defaults.ChangeTypes) {
 			t.Fatalf("config = %+v, error = %v", config, err)
 		}
 		for i := range config.ChangeTypes {
 			config.ChangeTypes[i] = ChangeType{"changed", "major", "Changed"}
 		}
-		fresh, err := parseRepositoryConfig([]byte(tc.data))
+		fresh, err := parseRepositoryConfig([]byte(data))
 		if err != nil || !reflect.DeepEqual(fresh.ChangeTypes, defaults.ChangeTypes) {
 			t.Fatalf("defaults were shared: %+v, %v", fresh, err)
 		}
 	}
-	config, err := parseRepositoryConfig([]byte("release-pr: {strategy: per-package}\ntypes: {security: {bump: patch}, docs: {section: Documentation}}"))
+	config, err := parseRepositoryConfig([]byte("types: {security: {bump: patch}, docs: {section: Documentation}}"))
 	want := []ChangeType{{"security", "patch", ""}, {"docs", "none", "Documentation"}}
-	if err != nil || config.ReleasePRStrategy != "per-package" || !reflect.DeepEqual(config.ChangeTypes, want) {
+	if err != nil || !reflect.DeepEqual(config.ChangeTypes, want) {
 		t.Fatalf("config = %+v, error = %v", config, err)
 	}
 	for _, data := range []string{
-		"release-pr: {strategy: invalid}", "types: {}", "{}\n---\n{}",
-		"types: {}\ntypes: {}", "release-pr: {}\nrelease-pr: {}",
-		"types: {fix: {bump: patch, bump: minor}}", "release-pr: {unknown: true}",
+		"types: {}", "{}\n---\n{}", "types: {}\ntypes: {}",
+		"types: {fix: {bump: patch, bump: minor}}",
 	} {
 		if _, err := parseRepositoryConfig([]byte(data)); err == nil {
 			t.Errorf("accepted invalid configuration: %s", data)
@@ -50,7 +45,7 @@ func TestRepositoryConfig(t *testing.T) {
 func TestLoadRepositoryConfig(t *testing.T) {
 	root := t.TempDir()
 	config, err := LoadRepositoryConfig(root)
-	if err != nil || config.ReleasePRStrategy != "combined" || len(config.ChangeTypes) != 5 {
+	if err != nil || len(config.ChangeTypes) != 5 {
 		t.Fatalf("missing config = %+v, error = %v", config, err)
 	}
 	path := filepath.Join(root, ".sweet.config.yml")
@@ -59,10 +54,6 @@ func TestLoadRepositoryConfig(t *testing.T) {
 	}
 	if _, err := LoadRepositoryConfig(root); err == nil || !strings.Contains(err.Error(), path) {
 		t.Fatalf("missing configuration path: %v", err)
-	}
-	// The strategy-only compatibility API does not validate unrelated policies.
-	if strategy, err := LoadReleasePRStrategy(root); err != nil || strategy != "combined" {
-		t.Fatalf("strategy = %q, error = %v", strategy, err)
 	}
 }
 

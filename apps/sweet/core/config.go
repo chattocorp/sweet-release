@@ -16,8 +16,6 @@ import (
 )
 
 const defaultRepositoryConfig = `# Sweet repository configuration
-release-pr:
-  strategy: per-package
 types:
   fix:
     bump: minor
@@ -43,13 +41,11 @@ type ChangeType struct {
 
 // RepositoryConfig contains shared release settings. ChangeTypes retains YAML order.
 type RepositoryConfig struct {
-	ChangeTypes       []ChangeType
-	ReleasePRStrategy string
+	ChangeTypes []ChangeType
 }
 
 type repositoryConfigNodes struct {
-	Types     yaml.Node `yaml:"types"`
-	ReleasePR yaml.Node `yaml:"release-pr"`
+	Types yaml.Node `yaml:"types"`
 }
 
 func decodeRepositoryConfig(data []byte) (repositoryConfigNodes, error) {
@@ -66,7 +62,7 @@ func decodeRepositoryConfig(data []byte) (repositoryConfigNodes, error) {
 }
 
 // LoadRepositoryConfig reads and validates the repository's shared settings once.
-// Missing settings use built-in types and the combined release PR strategy.
+// Missing settings use built-in types.
 func LoadRepositoryConfig(dir string) (RepositoryConfig, error) {
 	data, path, err := loadRepositoryConfig(dir)
 	if err != nil {
@@ -84,15 +80,11 @@ func parseRepositoryConfig(data []byte) (RepositoryConfig, error) {
 	if err != nil {
 		return RepositoryConfig{}, err
 	}
-	strategy, err := releasePRStrategy(nodes.ReleasePR)
-	if err != nil {
-		return RepositoryConfig{}, err
-	}
 	types, err := changeTypes(nodes.Types)
 	if err != nil {
 		return RepositoryConfig{}, err
 	}
-	return RepositoryConfig{ChangeTypes: types, ReleasePRStrategy: strategy}, nil
+	return RepositoryConfig{ChangeTypes: types}, nil
 }
 
 // ChangeTypes loads shared types from the package's Git repository root.
