@@ -6,6 +6,7 @@
 - Preview pending releases with `sweet status`.
 - Update package versions and generate changelogs with `sweet bump`.
 - Copy bumped versions into JSON, YAML, TOML, and plaintext files.
+- Create local release tags with `sweet git tag`.
 - Use interactive pickers or explicit arguments and piped input.
 
 ## How it works
@@ -32,6 +33,11 @@ semantic version. Running `sweet` without a command starts the change workflow.
 then removes the consumed change files. It changes local files only: committing,
 tagging, and publishing are separate steps. Dependency propagation is not yet
 supported.
+
+After committing a release, run `sweet git tag --dry-run` to preview its tags,
+then `sweet git tag` to create them locally. Sweet targets the commits that
+introduced the current versions. Push tags and publish through your own release
+process.
 
 This repository's [Release PR workflow](.github/workflows/release-pr.yml) runs
 Sweet as notes reach `main` and keeps release preparation PRs up to date.

@@ -187,3 +187,87 @@ func TestPlanTagsDoesNotAcceptOptionsAsRefs(t *testing.T) {
 		t.Fatal("accepted an option as a base ref")
 	}
 }
+
+func TestCurrentTagsOnlyCurrentVersions(t *testing.T) {
+	root, git, write, commit := tagFixture(t)
+	write(".sweet.yml", "version: 0.0.0\n")
+	write("api/.sweet.yml", "version: 1.0.0\n")
+	commit()
+	write("api/.sweet.yml", "version: 2.0.0\n")
+	release := commit()
+	commit() // Unrelated changes must not become the release target.
+	write("api/.sweet.yml", "version: 3.0.0\n")
+	tags, err := PlanCurrentTags(root)
+	if err != nil || len(tags) != 1 || tags[0].Name != "api/v2.0.0" || tags[0].Commit != release {
+		t.Fatalf("current plan: %+v, %v", tags, err)
+	}
+	if err := CreateReleaseTags(root, tags); err != nil {
+		t.Fatal(err)
+	}
+	if got := git("tag", "--list"); got != "api/v2.0.0" {
+		t.Fatalf("unexpected tags: %s", got)
+	}
+	if got := git("cat-file", "-t", "refs/tags/api/v2.0.0"); got != "tag" {
+		t.Fatalf("expected annotated tag, got %s", got)
+	}
+	tags, err = PlanCurrentTags(root)
+	if err != nil || !tags[0].Exists {
+		t.Fatalf("rerun: %+v, %v", tags, err)
+	}
+	if err := CreateReleaseTags(root, tags); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCurrentTagsFirstParentAndConflicts(t *testing.T) {
+	root, git, write, commit := tagFixture(t)
+	base := commit()
+	git("switch", "-c", "feature")
+	write("api/.sweet.yml", "version: 1.0.0\n")
+	side := commit()
+	git("switch", "main")
+	git("merge", "--no-ff", "feature", "-m", "Merge release")
+	release := git("rev-parse", "HEAD")
+	commit()
+	tags, err := PlanCurrentTags(root)
+	if err != nil || len(tags) != 1 || tags[0].Commit != release {
+		t.Fatalf("merge plan: %+v, %v", tags, err)
+	}
+	git("tag", "api/v1.0.0", side)
+	if _, err := PlanCurrentTags(root); err == nil {
+		t.Fatal("accepted a conflicting tag")
+	}
+	// Validate the whole plan before creating any tags, including a stale plan.
+	tags = append([]ReleaseTag{{Name: "v1.0.0", Commit: base}}, tags...)
+	if err := CreateReleaseTags(root, tags); err == nil {
+		t.Fatal("accepted a conflicting tag during creation")
+	}
+	if got := git("tag", "--list", "v1.0.0"); got != "" {
+		t.Fatal("created a partial plan before detecting conflict")
+	}
+}
+
+func TestCurrentTagsRejectShallowHistory(t *testing.T) {
+	root, git, write, commit := tagFixture(t)
+	write(".sweet.yml", "version: 1.0.0\n")
+	commit()
+	commit()
+	clone := filepath.Join(t.TempDir(), "clone")
+	git("clone", "--depth=1", "file://"+root, clone)
+	if _, err := PlanCurrentTags(clone); err == nil || !strings.Contains(err.Error(), "full Git history") {
+		t.Fatalf("accepted shallow history: %v", err)
+	}
+}
+
+func TestCurrentTagsIgnoreUnrelatedHistoricalManifests(t *testing.T) {
+	root, git, write, commit := tagFixture(t)
+	write(".sweet.yml", "version: 1.0.0\n")
+	write("retired/.sweet.yml", "version: unfinished\n")
+	release := commit()
+	git("rm", "retired/.sweet.yml")
+	commit()
+	tags, err := PlanCurrentTags(root)
+	if err != nil || len(tags) != 1 || tags[0].Commit != release {
+		t.Fatalf("unrelated historical manifest blocked current release: %+v, %v", tags, err)
+	}
+}

@@ -179,7 +179,22 @@ and manual CI dispatches do not create tags. Each main push has its own concurre
 group so a later push cannot cancel a range before tagging. Separate runs can push
 different tags concurrently; a competing write to the same tag fails without force.
 
-`sweet tags plan --base <before-sha> --head <after-sha>` prints a JSON array with
+`sweet git tag` creates missing annotated local tags for package versions committed
+at `HEAD`. It follows first-parent history to find the commit that introduced each
+current version; it does not backfill older versions or use working files. It skips
+`0.0.0` and retains matching existing tags, including lightweight tags. Conflicting
+tags stop the operation before creation. Full history is required; shallow clones
+must fetch with `--unshallow` first. Fetch remote tags before running the command
+to include them in conflict checks. Sweet does not fetch or push tags itself.
+
+Use `sweet git tag --dry-run` to preview without writing. Add `--json` for the
+machine-readable plan. Its `exists` field describes tags present before creation.
+An operational Git failure can leave some local tags created; rerun to complete
+the remaining tags. Tags are never moved or overwritten.
+
+For an explicit commit range, use
+`sweet git tag --base <before-sha> --head <after-sha> --dry-run --json`.
+Both range flags are required together. This prints a JSON array with
 `package`, `version`, `name`, `commit`, and `exists` fields. It reads committed
 manifests, not working files, and makes no Git changes or network requests. Fetch
 remote tags before invoking it if existing-tag checks must include remote state.
@@ -200,7 +215,8 @@ are not backfilled. Manual version edits on main are treated like prepared relea
 Package paths must produce valid Git tag names; for example, paths containing spaces
 cannot be tagged with this convention. Tag customization is not implemented.
 
-The script creates annotated tags and pushes only the planned refs with
+The script invokes `sweet git tag --base <before-sha> --head <after-sha> --json`
+to create annotated tags, then pushes only the planned refs with
 `git push --atomic`. Matching existing tags are retained, including lightweight
 tags. A tag targeting another commit or a version reused within the range stops
 the operation. Tags are never moved or overwritten. If a remote rejects any tag,
