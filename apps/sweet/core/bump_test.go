@@ -27,7 +27,7 @@ func TestReleaseEntryBreakingAndSharedSections(t *testing.T) {
 		{Type: "hidden", Body: "Hidden."},
 	}}
 	got := releaseEntry(status, []ChangeType{{Name: "feature", Section: "Changes"}, {Name: "fix", Section: "Changes"}})
-	want := "## 2.0.0\n\n### Changes\n\n- A fix.\n- **Breaking change.**\n\n  A new API.\n"
+	want := "## 2.0.0\n\n### Changes\n\n- A fix.\n- ⚠️ **BREAKING CHANGE:** A new API.\n"
 	if got != want {
 		t.Fatal(got)
 	}

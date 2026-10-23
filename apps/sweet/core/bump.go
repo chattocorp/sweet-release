@@ -239,7 +239,7 @@ func releaseEntry(status PackageStatus, types []ChangeType) string {
 			}
 			body := strings.TrimSpace(change.Body)
 			if change.Breaking {
-				body = "**Breaking change.**\n\n" + body
+				body = "⚠️ **BREAKING CHANGE:** " + body
 			}
 			if body != "" {
 				lines := strings.Split(body, "\n")
