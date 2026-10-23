@@ -48,16 +48,19 @@ A breaking change requires at least a minor bump for `0.x` packages and a major
 bump for other versions. A type configured with a major bump still requires a
 major bump for a `0.x` package.
 
-In the generated changelog, breaking notes appear first in each section and start
-with an inline warning. The existing order is preserved within the breaking and
-non-breaking groups:
+In the generated changelog, breaking notes appear once in a `Breaking Changes`
+section at the top of each release, regardless of their type. The existing note
+order is preserved within each section. Empty sections are omitted:
 
 ```markdown
-- ⚠️ **BREAKING CHANGE:** Replace the old API with the new API.
+### Breaking Changes
+
+- Replace the old API with the new API.
 ```
 
-The type's `section` controls where the note appears in the changelog. A type
-without a section can still trigger a version bump. Notes with no version effect
+The type's `section` controls where non-breaking notes appear in the changelog.
+A type without a section is excluded unless the note is breaking, but can
+still trigger a version bump. Notes with no version effect
 stay pending until another note causes the package to release.
 
 ## Links to commits and pull requests
