@@ -1,5 +1,5 @@
 ---
-type: refactor
+type: feature
 breaking: true
 ---
 
