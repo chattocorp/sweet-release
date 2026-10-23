@@ -1,5 +1,47 @@
 # Sweet Release Changelog
 
+## 0.2.0
+
+### Fixes
+
+- ⚠️ **BREAKING CHANGE:** Show help when running `sweet` without a command. Use `sweet change` to write
+  release notes, including with `--type` and `--stdin`. ([#24](https://github.com/chattocorp/sweet-release/pull/24))
+- Validate semantic versions consistently when reading package manifests, including before creating release notes. Use one repository file inventory and one loaded configuration for release preparation. ([#17](https://github.com/chattocorp/sweet-release/pull/17))
+- List breaking changes first in each changelog section, preserving the order within breaking and non-breaking notes. ([#31](https://github.com/chattocorp/sweet-release/pull/31))
+- Format breaking changes with an inline ⚠️ **BREAKING CHANGE:** label so the description follows the warning on the same line. ([#38](https://github.com/chattocorp/sweet-release/pull/38))
+- Keep PR and commit links inline when a wrapped release-note paragraph has a line
+  that starts with inline code. ([#36](https://github.com/chattocorp/sweet-release/pull/36))
+- Keep commit and PR links inline for release notes whose paragraphs wrap across source lines. ([#35](https://github.com/chattocorp/sweet-release/pull/35))
+
+### Features
+
+- ⚠️ **BREAKING CHANGE:** Replace `sweet release-notes <file>` with `sweet changelog [package]`.
+  Select a package directory instead of a changelog file. With no package argument,
+  use the current package or choose one interactively. Show the latest changelog
+  release by default, or select one with `--version <version>`. The output remains
+  the release body without its version heading. The old command is removed. ([#23](https://github.com/chattocorp/sweet-release/pull/23))
+- ⚠️ **BREAKING CHANGE:** Replace `sweet tags plan` with `sweet git tag`. Create missing annotated local
+  tags for current committed releases at their version-introduction commits. Use
+  `--dry-run` to preview, `--json` for automation, and `--base` with `--head` to
+  select an explicit commit range. Tags are never pushed or overwritten. ([#21](https://github.com/chattocorp/sweet-release/pull/21))
+- ⚠️ **BREAKING CHANGE:** Remove `sweet release-pr plan` and the `release-pr` configuration setting.
+  Release PR automation now uses `sweet status --json` and `sweet bump`, with
+  PR policy owned by the workflow. Existing `release-pr` settings have no effect
+  and can be removed. ([#22](https://github.com/chattocorp/sweet-release/pull/22))
+- ⚠️ **BREAKING CHANGE:** Consolidate the CLI and core into one Sweet Release package at `apps/sweet`,
+  starting from the CLI version 0.1.0 and changelog. The Go module is now
+  `github.com/chattocorp/sweet-release/apps/sweet`; core imports use its `/core`
+  subpackage. New releases use `apps/sweet/v<version>` tags. Existing `pkg/sweet/v` and `pkg/cli/v`
+  releases remain available and can still be published. The retired core changelog
+  is retained as historical documentation. ([#17](https://github.com/chattocorp/sweet-release/pull/17))
+- Link changelog items to their introducing PR or commit using local Git history, with an optional repository URL override. ([#33](https://github.com/chattocorp/sweet-release/pull/33))
+- Use package display names in release headings and GitHub Release titles. ([#17](https://github.com/chattocorp/sweet-release/pull/17))
+- Publish CLI binary archives and checksums after version tagging, with release notes from the changelog and retry support for incomplete uploads. ([#17](https://github.com/chattocorp/sweet-release/pull/17))
+- Add `sweet status --json` for release automation. ([#17](https://github.com/chattocorp/sweet-release/pull/17))
+- Add `sweet changelog [package]` to read the latest released changes, or use
+  `--version <version>` to select a release. Release workflows use the changelog to describe releases without
+  reconstructing notes from Git diffs. ([#17](https://github.com/chattocorp/sweet-release/pull/17))
+
 ## 0.1.0
 
 ### Fixes
