@@ -76,7 +76,8 @@ in subjects that end with ` (#123)` or start with
 `Merge pull request #123 from ...`. Otherwise, it links to the commit using its
 short SHA. Later edits to a note do not change its source link. For a single
 paragraph, the link stays inline, including when the source text wraps across
-lines. For structured Markdown or multiple paragraphs, the link appears in a
+lines, including lines that start with inline code such as `--version`. For
+structured Markdown or multiple paragraphs, the link appears in a
 separate paragraph within the changelog item.
 
 Commit the note with the change it describes. These links follow the note's

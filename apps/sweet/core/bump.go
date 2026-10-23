@@ -287,7 +287,8 @@ func isWrappedParagraph(body string) bool {
 	for _, line := range strings.Split(body, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t") ||
-			strings.ContainsAny(trimmed[:1], "#>`~|<[") || changelogListMarker.MatchString(trimmed) ||
+			strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") ||
+			strings.ContainsAny(trimmed[:1], "#>|<[") || changelogListMarker.MatchString(trimmed) ||
 			strings.Trim(trimmed, "-*_ =\t") == "" {
 			return false
 		}
