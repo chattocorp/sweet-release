@@ -45,6 +45,30 @@ changes, then tag and publish through your project's release process.
 Running `sweet bump` again without new notes makes no changes. Dependency
 propagation between packages is not implemented.
 
+## Tag committed releases
+
+```sh
+sweet git tag --dry-run
+sweet git tag
+```
+
+The command creates annotated local tags for the current committed package
+versions. Tags use `<package-directory>/v<version>`, or `v<version>` for a root
+package. Each tag targets the commit that introduced the version on first-parent
+history, even if other commits followed it. Uncommitted changes, older versions,
+and `0.0.0` versions are excluded.
+
+Matching existing tags are retained. A tag at a different commit is an error;
+Sweet never moves or overwrites tags. Use a full-history checkout and fetch remote
+tags first if they must be included in conflict checks. Sweet does not fetch,
+push, or publish anything. If Git fails after creating some tags, rerun the
+command to create the remaining tags.
+
+For automation, add `--json` to print the plan. The `exists` field reports whether
+each tag existed before creation. To select version changes within a commit range,
+pass both `--base <commit>` and `--head <commit>`. Combine these with `--dry-run`
+to inspect the range without creating tags.
+
 ## Plan release pull requests
 
 ```sh

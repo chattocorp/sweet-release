@@ -141,9 +141,49 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 	}
 }
 
-func TestTagsPlanRequiresRange(t *testing.T) {
+func TestGitTagRequiresCompleteRange(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"tags", "plan"}, &stdout, &stderr); code == 0 || stdout.Len() > 0 || !strings.Contains(stderr.String(), "required flag") {
+	if code := run([]string{"git", "tag", "--base", "HEAD"}, &stdout, &stderr); code == 0 || stdout.Len() > 0 || !strings.Contains(stderr.String(), "missing [head]") {
 		t.Fatalf("missing range: %d, %s, %s", code, &stdout, &stderr)
+	}
+}
+
+func TestGitTagDryRunAndCreate(t *testing.T) {
+	t.Chdir(t.TempDir())
+	git := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("git", args...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init")
+	git("config", "user.name", "Test")
+	git("config", "user.email", "test@example.com")
+	if err := os.WriteFile(".sweet.yml", []byte("version: 1.0.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("commit", "-m", "Release")
+	invoke := func(args ...string) string {
+		t.Helper()
+		var out, stderr bytes.Buffer
+		if code := run(args, &out, &stderr); code != 0 {
+			t.Fatalf("%v: %d: %s", args, code, &stderr)
+		}
+		return out.String()
+	}
+	if out := invoke("git", "tag", "--dry-run"); !strings.Contains(out, "Would create v1.0.0") {
+		t.Fatalf("dry run: %s", out)
+	}
+	if tags := git("tag", "--list"); tags != "" {
+		t.Fatalf("dry run created tags: %s", tags)
+	}
+	if out := invoke("git", "tag"); !strings.Contains(out, "Created v1.0.0") {
+		t.Fatalf("creation: %s", out)
+	}
+	if out := invoke("git", "tag"); out != "No new release tags.\n" {
+		t.Fatalf("rerun: %s", out)
 	}
 }
