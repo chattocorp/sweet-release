@@ -31,6 +31,9 @@ For each selected package with a pending bump, Sweet updates `.sweet.yml`,
 configured version files, and `CHANGELOG.md`. It then deletes all consumed notes,
 including notes with no version effect. Existing changelog history is preserved.
 
+Changelog items have no blank lines between them. Paragraphs and other Markdown
+formatting within each note are preserved.
+
 Sweet validates selected packages and prepares all edits before writing. An
 unrelated invalid package does not block an explicit selection. If a file
 operation fails, Sweet attempts to restore affected files. Review the Git diff

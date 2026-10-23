@@ -253,7 +253,7 @@ func releaseEntry(status PackageStatus, types []ChangeType) string {
 			}
 		}
 		if len(bodies) > 0 {
-			fmt.Fprintf(&out, "\n### %s\n\n%s\n", section, strings.Join(bodies, "\n\n"))
+			fmt.Fprintf(&out, "\n### %s\n\n%s\n", section, strings.Join(bodies, "\n"))
 		}
 	}
 	return out.String()
