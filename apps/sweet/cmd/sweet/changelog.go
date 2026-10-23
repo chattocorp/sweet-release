@@ -7,10 +7,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newReleaseNotesCommand() *cobra.Command {
+func newChangelogCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "changelog",
+		Short: "Read package changelogs",
+	}
+	cmd.AddCommand(newChangelogExtractCommand())
+	return cmd
+}
+
+func newChangelogExtractCommand() *cobra.Command {
 	var version string
 	cmd := &cobra.Command{
-		Use:   "release-notes <changelog>",
+		Use:   "extract <file>",
 		Short: "Read one version's notes from an existing changelog",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

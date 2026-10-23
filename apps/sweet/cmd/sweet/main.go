@@ -45,7 +45,7 @@ func newRootCommand() *cobra.Command {
 	cmd.AddCommand(newInitCommand())
 	cmd.AddCommand(newStatusCommand())
 	cmd.AddCommand(newBumpCommand())
-	cmd.AddCommand(newReleaseNotesCommand())
+	cmd.AddCommand(newChangelogCommand())
 	cmd.AddCommand(newGitCommand())
 	cmd.AddCommand(change)
 	return cmd

@@ -56,7 +56,7 @@ def prepare(sweet, job, destination):
                 continue
             name = package.get("name") or path
             version = package["version"]
-            notes = output(sweet, "release-notes", "--version", version, "--",
+            notes = output(sweet, "changelog", "extract", "--version", version, "--",
                            str(Path(path) / "CHANGELOG.md"))
             body += f"\n## {name}\n\nTarget version: **{version}**\n\n{notes}"
     destination.mkdir(parents=True, exist_ok=True)

@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestReleaseNotesCommand(t *testing.T) {
+func TestChangelogExtractCommand(t *testing.T) {
 	// No repository, configuration, or historical CLI source is required.
 	path := filepath.Join(t.TempDir(), "CHANGELOG.md")
 	if err := os.WriteFile(path, []byte("# Log\n\n## 1.0.0\n\nNew\n\n## 0.1.0\nOld\n"), 0o644); err != nil {
@@ -23,11 +24,17 @@ func TestReleaseNotesCommand(t *testing.T) {
 		{[]string{path, "--version", "2.0.0"}, "", false},
 		{[]string{path}, "", false},
 		{[]string{path + ".missing", "--version", "1.0.0"}, "", false},
+		{[]string{"--version", "1.0.0"}, "", false},
+		{[]string{path, path, "--version", "1.0.0"}, "", false},
 	} {
 		var out, stderr bytes.Buffer
-		code := run(append([]string{"release-notes"}, tc.args...), &out, &stderr)
+		code := run(append([]string{"changelog", "extract"}, tc.args...), &out, &stderr)
 		if (code == 0) != tc.success || out.String() != tc.want {
 			t.Fatalf("%v: code %d, out %q, err %s", tc.args, code, out.String(), &stderr)
 		}
+	}
+	var out, stderr bytes.Buffer
+	if code := run([]string{"release-notes"}, &out, &stderr); code == 0 || !strings.Contains(stderr.String(), "unknown command") {
+		t.Fatalf("old command still accepted: %d, %s, %s", code, &out, &stderr)
 	}
 }

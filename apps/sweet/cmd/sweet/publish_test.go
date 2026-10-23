@@ -53,7 +53,7 @@ func TestCLIPublishing(t *testing.T) {
 				write(releasePackage+"/CHANGELOG.md", "# Changelog\n\n## "+tc.version+"\n\n- New feature.\n\n## 0.0.1\n\n- Old feature.\n")
 				write("config.yml", "builds:\n  - id: sweet\n    dir: apps/sweet\n")
 				write("bin/git", "#!/bin/sh\necho commit\n")
-				write("bin/sweet", "#!/bin/sh\nif [ \"$1\" = release-notes ]; then exec \"$TEST_METADATA\" \"$@\"; fi\nprintf '%s\\n' '[{\"path\":\""+releasePackage+"\",\"name\":\"Sweet Release\"}]'\n")
+				write("bin/sweet", "#!/bin/sh\nif [ \"$1\" = changelog ]; then exec \"$TEST_METADATA\" \"$@\"; fi\nprintf '%s\\n' '[{\"path\":\""+releasePackage+"\",\"name\":\"Sweet Release\"}]'\n")
 				write("bin/goreleaser", `#!/bin/sh
 echo build >> "$TEST_LOG"
 while [ "$1" != --config ]; do shift; done

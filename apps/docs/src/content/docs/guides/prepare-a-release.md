@@ -78,7 +78,7 @@ For a combined release, run `sweet bump --all` in one clean checkout instead.
 
 Your automation owns PR branches, titles, descriptions, and cleanup. Sweet has
 no `release-pr` command or PR strategy setting. Extract descriptions from the
-updated changelogs with `sweet release-notes <changelog> --version <version>`.
+updated changelogs with `sweet changelog extract <file> --version <version>`.
 
 For a working automation example, see this repository's
 [Release PR workflow](https://github.com/chattocorp/sweet-release/blob/main/.github/workflows/release-pr.yml).
