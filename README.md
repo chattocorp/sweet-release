@@ -48,9 +48,11 @@ tagging workflow creates `<package-directory>/v<version>` tags (or `v<version>`
 for a root package). CLI releases then publish Linux, macOS, and Windows binaries
 with checksums on the repository's [Releases page](https://github.com/chattocorp/sweet-release/releases).
 
+The [documentation site](apps/docs) contains setup and usage guides.
 See [AGENTS.md](AGENTS.md) for development instructions and detailed behavior.
 
-Sweet Release itself is one package in `pkg/sweet`, with Go module
-`github.com/chattocorp/sweet-release/pkg/sweet` and release tags
-`pkg/sweet/v<version>`. Core imports now use the module's `/core` subpackage.
-Existing `pkg/cli/v` releases remain available on the Releases page.
+The CLI is in `apps/sweet`, with Go module
+`github.com/chattocorp/sweet-release/apps/sweet` and release tags
+`apps/sweet/v<version>`. Core imports now use the module's `/core` subpackage.
+Existing `pkg/sweet/v` and `pkg/cli/v` releases remain available on the Releases page.
+The Astro and Starlight documentation site is a separate package in `apps/docs`.

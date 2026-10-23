@@ -14,29 +14,33 @@ or updating issues. Read `issues/means.schema.json` before writing and use
 
 ## Development
 
-The software is one Sweet release package and Go module in `pkg/sweet`:
+The repository has two independently versioned Sweet packages: the Go CLI in
+`apps/sweet` and the Astro and Starlight documentation site in `apps/docs`.
+
+The Go module in `apps/sweet` contains:
 
 - `cmd/sweet`: the CLI and command integration tests.
 - `core`: package discovery, release planning, and file updates.
 - `version.go`: the CLI version, updated by the package manifest.
 
-The module path is `github.com/chattocorp/sweet-release/pkg/sweet`. Core imports
-use `github.com/chattocorp/sweet-release/pkg/sweet/core`. The root `go.work`
-contains this module; future packages, such as a docs website, can release
-independently. The root is not a release package.
+The module path is `github.com/chattocorp/sweet-release/apps/sweet`. Core imports
+use `github.com/chattocorp/sweet-release/apps/sweet/core`. The root `go.work`
+contains this module. The root is not a release package.
 
 The unified package starts from CLI version 0.1.0 and retains the CLI changelog.
-The retired core changelog in `pkg/sweet/core/CHANGELOG.md` is historical only.
-New tags use `pkg/sweet/v<version>`, which also versions the nested Go module.
-Existing `pkg/cli/v` and `pkg/core/v` tags retain their original source layouts.
+The retired core changelog in `apps/sweet/core/CHANGELOG.md` is historical only.
+New tags use `apps/sweet/v<version>`, which also versions the nested Go module.
+Existing `pkg/sweet/v`, `pkg/cli/v`, and `pkg/core/v` tags retain their original
+source layouts. Moving a manifest above `0.0.0` to a new directory makes it
+eligible for a tag at that path, even if its version is unchanged.
 
 With the Go version from `mise.toml` installed, run these commands at the root:
 
 ```sh
-go run ./pkg/sweet/cmd/sweet status
-go test ./pkg/sweet/...
-go vet ./pkg/sweet/...
-go build -o bin/sweet ./pkg/sweet/cmd/sweet
+go run ./apps/sweet/cmd/sweet status
+go test ./apps/sweet/...
+go vet ./apps/sweet/...
+go build -o bin/sweet ./apps/sweet/cmd/sweet
 ```
 
 The equivalent Mise tasks are `mise run sweet -- status`, `mise run check`, and
@@ -46,8 +50,40 @@ Run all Go checks from the repository root.
 GitHub Actions runs CI on branch pushes and pull requests. It checks Go formatting,
 runs all tests with race detection, runs `go vet`, and builds the CLI
 on Linux. You can also start the CI workflow manually from the Actions tab.
-To run the additional checks locally, use `gofmt -l pkg` (no output means
-formatting is correct) and `go test -race ./pkg/sweet/...`.
+To run the additional checks locally, use `gofmt -l apps/sweet` (no output means
+formatting is correct) and `go test -race ./apps/sweet/...`.
+
+### Documentation site development
+
+Install the tools with `mise install`. The site uses Node 24 and pnpm, with its own
+`package.json` and `pnpm-lock.yaml` in `apps/docs`; no root JavaScript workspace is needed.
+From the repository root:
+
+```sh
+mise run docs:install
+mise run docs:dev
+mise run docs:check
+mise run docs:build
+mise run docs:preview
+```
+
+The equivalent pnpm commands are `pnpm --dir apps/docs install --frozen-lockfile` and
+`pnpm --dir apps/docs run <dev|check|build|preview>`. Content lives in
+`apps/docs/src/content/docs/`. Navigation is explicit in `apps/docs/astro.config.mjs`;
+add new pages there. Use relative links between content pages. Starlight provides
+search, a table of contents, and light and dark themes.
+
+CI checks and builds the docs alongside Go checks before tagging releases.
+Static output goes to `apps/docs/dist/`. Hosting is not configured yet. Set Astro's
+`site` (and `base` for subpath hosting) when choosing a deployment target, and
+check navigation, the favicon, and search under that URL.
+
+The site's `.sweet.yml` controls its independent version and updates
+`package.json`. After `sweet bump apps/docs`, run
+`pnpm --dir apps/docs install --lockfile-only --no-frozen-lockfile --ignore-scripts` and commit
+the lockfile with the release. The Release PR workflow does this and verifies
+the site automatically for docs releases. Docs tags use `apps/docs/v<version>`
+and do not publish CLI binaries.
 
 ## Releases
 
@@ -136,8 +172,8 @@ publishing task is needed.
 
 ### Version tags
 
-On pushes to `main`, CI calls `.github/workflows/tag-releases.yml` after Go checks
-succeed. It checks out the exact pushed SHA, fetches tags, and runs the Go tag
+On pushes to `main`, CI calls `.github/workflows/tag-releases.yml` after Go and
+documentation checks succeed. It checks out the exact pushed SHA, fetches tags, and runs the Go tag
 planner through `.github/scripts/tag-releases.sh`. Pull requests, other branches,
 and manual CI dispatches do not create tags. Each main push has its own concurrency
 group so a later push cannot cancel a range before tagging. Separate runs can push
@@ -181,22 +217,24 @@ tags, reruns, conflicts, atomic rejection, and recovery without contacting GitHu
 ### CLI publishing
 
 After tags are pushed, the tag workflow calls `.github/workflows/release.yml`
-for each software release in the plan. Only `pkg/sweet` and historical `pkg/cli`
+for each software release in the plan. Only `apps/sweet` and historical
+`pkg/sweet` and `pkg/cli`
 releases build binaries; docs and retired core releases do not.
 Each job checks out the exact tag commit and verifies it against the planner's
 commit. Jobs for the same tag are serialized. Publishing failures leave tags
 intact; rerunning CI retries publishing, including tags that already exist.
 
 The workflow keeps its own build configuration and script when checking out an
-older tag. It selects `pkg/sweet/go.mod` for current source, root `go.mod`
+older tag. It selects `apps/sweet/go.mod` for current source,
+`pkg/sweet/go.mod` for the previous unified layout, root `go.mod`
 for the intermediate layout, and `pkg/cli/go.mod` for historical source after
 checkout. The retained check script runs tests and vet for each layout. The tag
-selects the build directory, manifest, and changelog: `pkg/sweet` for new tags
-and `pkg/cli` for historical tags. You can publish or retry
+selects the build directory, manifest, and changelog: `apps/sweet` for new tags,
+and `pkg/sweet` or `pkg/cli` for historical tags. You can publish or retry
 an existing CLI tag from main manually:
 
 ```sh
-gh workflow run release.yml --ref main -f tag=pkg/sweet/v0.1.0
+gh workflow run release.yml --ref main -f tag=apps/sweet/v0.1.0
 ```
 
 GoReleaser's free edition builds archives in snapshot mode with an explicit
@@ -229,7 +267,7 @@ The snapshot runs tests and static checks, then creates archives and SHA-256
 checksums in `dist/` without publishing. It builds `sweet` for Linux, macOS,
 and Windows on amd64 and arm64. Windows archives use ZIP; the others use tar.gz.
 The binary's `--version` output contains the release or snapshot version.
-Local builds default to `sweet.Version` in `pkg/sweet/version.go`. The Sweet package's
+Local builds default to `sweet.Version` in `apps/sweet/version.go`. The Sweet package's
 `version-files` entry updates its annotated constant during `sweet bump`.
 The `-X main.version=...` linker option overrides the displayed version
 for release and snapshot builds.
@@ -497,8 +535,8 @@ such as `code --wait`; they run through `sh`. Sweet waits for the editor to exit
 and keeps the file if the editor fails.
 
 ```sh
-sweet change pkg/sweet
-printf 'Add package discovery.\n' | sweet change pkg/sweet --type feature --stdin
+sweet change apps/sweet
+printf 'Add package discovery.\n' | sweet change apps/sweet --type feature --stdin
 ```
 
 `--stdin` writes input verbatim as the Markdown body below the generated frontmatter

@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing CLI tag to publish (pkg/sweet/v... or historical pkg/cli/v...)
+        description: Existing CLI tag to publish (apps/sweet/v..., pkg/sweet/v..., or pkg/cli/v...)
         required: true
         type: string
 
@@ -35,11 +35,11 @@ jobs:
       # Use this workflow's tooling even when publishing an older source tag.
       - uses: actions/setup-go@v7
         with:
-          go-version-file: pkg/sweet/go.mod
-          cache-dependency-path: pkg/sweet/go.sum
+          go-version-file: apps/sweet/go.mod
+          cache-dependency-path: apps/sweet/go.sum
       - name: Preserve release tooling
         run: |
-          go build -o "$RUNNER_TEMP/sweet-metadata" ./pkg/sweet/cmd/sweet
+          go build -o "$RUNNER_TEMP/sweet-metadata" ./apps/sweet/cmd/sweet
           cp .goreleaser.yml "$RUNNER_TEMP/goreleaser.yml"
           cp .github/scripts/publish-cli.sh "$RUNNER_TEMP/publish-cli.sh"
           cp .github/scripts/check-go.sh "$RUNNER_TEMP/check-go.sh"
@@ -48,7 +48,7 @@ jobs:
           TAG: ${{ inputs.tag }}
           EXPECTED_COMMIT: ${{ inputs.commit }}
         run: |
-          [[ "$TAG" == pkg/sweet/v* || "$TAG" == pkg/cli/v* ]]
+          [[ "$TAG" == apps/sweet/v* || "$TAG" == pkg/sweet/v* || "$TAG" == pkg/cli/v* ]]
           commit=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
           [[ -z "$EXPECTED_COMMIT" || "$commit" == "$EXPECTED_COMMIT" ]]
           git checkout --detach "$commit"
@@ -60,6 +60,7 @@ jobs:
         with:
           go-version-file: ${{ steps.release-go.outputs.version-file }}
           cache-dependency-path: |
+            apps/sweet/go.sum
             pkg/sweet/go.sum
             go.sum
             pkg/cli/go.sum

@@ -5,6 +5,7 @@ tag=$1
 config=$2
 metadata=${SWEET_METADATA:?Set SWEET_METADATA to the current sweet binary}
 case "$tag" in
+  apps/sweet/v*) package=apps/sweet ;;
   pkg/sweet/v*) package=pkg/sweet ;;
   pkg/cli/v*) package=pkg/cli ;;
   *) echo "Unsupported release tag: $tag" >&2; exit 1 ;;
@@ -28,7 +29,7 @@ export GORELEASER_CURRENT_TAG="v$version"
 # configuration outside the checkout when publishing the historical CLI layout.
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT
-awk -v directory="$package" '{ if ($0 == "    dir: pkg/sweet") $0 = "    dir: " directory; print }' "$config" > "$temporary/goreleaser.yml"
+awk -v directory="$package" '{ if ($0 == "    dir: apps/sweet") $0 = "    dir: " directory; print }' "$config" > "$temporary/goreleaser.yml"
 goreleaser release --snapshot --clean --config "$temporary/goreleaser.yml"
 
 # Verify the actual binary, including the linker-supplied version.

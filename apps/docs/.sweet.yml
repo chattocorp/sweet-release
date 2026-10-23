@@ -1,0 +1,6 @@
+name: Sweet Release Docs
+version: 0.0.0
+version-files:
+  - path: package.json
+    format: json
+    key: version
