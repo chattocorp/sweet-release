@@ -17,7 +17,9 @@ func TestRun(t *testing.T) {
 		output      string
 		errorOutput string
 	}{
-		{name: "no arguments", code: 2, errorOutput: "not a Sweet package"},
+		{name: "no arguments", output: "Usage:"},
+		{name: "change type requires subcommand", args: []string{"--type", "fix"}, code: 2, errorOutput: "unknown flag"},
+		{name: "stdin requires subcommand", args: []string{"--stdin"}, code: 2, errorOutput: "unknown flag"},
 		{name: "help", args: []string{"--help"}, output: "Usage:"},
 		{name: "short help", args: []string{"-h"}, output: "Usage:"},
 		{name: "version", args: []string{"--version"}, output: "sweet " + sweet.Version + "\n"},

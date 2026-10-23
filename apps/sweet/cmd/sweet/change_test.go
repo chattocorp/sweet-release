@@ -58,7 +58,7 @@ func TestChangeSuggestsPackages(t *testing.T) {
 func TestChangeMissingPackageGuidance(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("EDITOR", "")
-	for _, args := range [][]string{nil, {"change"}, {"change", "missing"}} {
+	for _, args := range [][]string{{"change"}, {"change", "missing"}} {
 		var stdout, stderr bytes.Buffer
 		if code := run(args, &stdout, &stderr); code == 0 {
 			t.Fatal("accepted missing package")
@@ -73,16 +73,13 @@ func TestChangeMissingPackageGuidance(t *testing.T) {
 }
 
 func TestChangeStdin(t *testing.T) {
-	for _, mode := range []string{"default", "current", "given"} {
+	for _, mode := range []string{"current", "given"} {
 		t.Run(mode, func(t *testing.T) {
 			dir := t.TempDir()
 			if _, err := core.InitPackage(dir); err != nil {
 				t.Fatal(err)
 			}
 			args := []string{"change", "--stdin", "--type", "fix"}
-			if mode == "default" {
-				args = args[1:]
-			}
 			if mode == "given" {
 				args = append(args, dir)
 			} else {

@@ -27,7 +27,7 @@ sweet bump pkg/api            # Prepare the package's next release
 
 Each note has a change type and a Markdown body, with an optional breaking-change
 flag. Sweet uses these notes and the configured policies to calculate the next
-semantic version. Running `sweet` without a command starts the change workflow.
+semantic version. Running `sweet` without a command shows help.
 
 `sweet bump` updates `.sweet.yml`, configured `version-files`, and `CHANGELOG.md`,
 then removes the consumed change files. It changes local files only: committing,

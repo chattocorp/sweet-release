@@ -521,8 +521,8 @@ the release commit or PR. Sweet does not run post-bump scripts.
 
 ## Write release notes
 
-Run `sweet` to start the `sweet change` workflow. You can also pass `--type` and
-`--stdin` directly to `sweet`. Use `sweet --help` to show the available commands.
+Run `sweet change` to write a release note, with optional `--type` and `--stdin`
+flags. Run `sweet` or `sweet --help` to show the available commands.
 
 Run `sweet change [package]` with a package directory, or omit the argument to use
 the current directory. The package must already contain a valid `.sweet.yml`.
