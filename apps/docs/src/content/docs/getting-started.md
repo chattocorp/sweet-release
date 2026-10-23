@@ -44,8 +44,7 @@ sweet change
 ```
 
 Choose a change type and enter a short description. Leave the description empty
-to write a longer note in `$EDITOR`. Running `sweet` without a command starts
-the same workflow.
+to write a longer note in `$EDITOR`. Running `sweet` without a command shows help.
 
 For a package elsewhere, pass its directory: `sweet change pkg/api`.
 
