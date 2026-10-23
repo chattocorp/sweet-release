@@ -149,3 +149,14 @@ func TestSourceLinkMultiline(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestSourceUnicodePath(t *testing.T) {
+	root := sourceTestRepo(t)
+	path := "paquet-é/.sweet/note.md"
+	sourceTestWrite(t, root, path, "Note")
+	sourceTestGit(t, root, "add", ".")
+	sourceTestGit(t, root, "commit", "-m", "feat: add note (#45)")
+	if got := sourceLink(root, "https://github.com/owner/repo", path); got != "[#45](https://github.com/owner/repo/pull/45)" {
+		t.Fatal(got)
+	}
+}

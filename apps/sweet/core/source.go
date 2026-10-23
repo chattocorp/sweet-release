@@ -48,7 +48,7 @@ func sourceGit(root string, args ...string) string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(output))
+	return strings.TrimRight(string(output), "\r\n")
 }
 
 // sourceLink uses the commit that added the note to the first-parent history.
@@ -58,7 +58,7 @@ func sourceLink(root, repository, path string) string {
 	if repository == "" || sourceGit(root, "rev-parse", "--is-shallow-repository") != "false" {
 		return ""
 	}
-	if sourceGit(root, "ls-tree", "--name-only", "HEAD", "--", path) != path {
+	if sourceGit(root, "ls-tree", "-z", "--name-only", "HEAD", "--", path) != path+"\x00" {
 		return ""
 	}
 	entry := sourceGit(root, "log", "-1", "--first-parent", "--diff-merges=first-parent", "--no-patch", "--diff-filter=A", "--no-renames", "--format=%H%n%s", "HEAD", "--", path)
