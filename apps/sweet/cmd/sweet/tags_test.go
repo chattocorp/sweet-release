@@ -61,7 +61,11 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 	commit := func(version string) string {
 		t.Helper()
 		for _, file := range []string{".sweet.yml", "pkg/api/.sweet.yml", "apps/sweet/.sweet.yml", "apps/docs/.sweet.yml", "pkg/sweet/.sweet.yml", "pkg/cli/.sweet.yml", "pkg/core/.sweet.yml", "pkg/docs/.sweet.yml"} {
-			write(filepath.Join(root, file), "version: "+version+"\n")
+			prefix := ""
+			if file == "pkg/sweet/.sweet.yml" || file == "pkg/docs/.sweet.yml" {
+				prefix = "tag-prefix: " + filepath.Dir(file) + "/v\n"
+			}
+			write(filepath.Join(root, file), "version: "+version+"\n"+prefix)
 		}
 		git(root, "add", ".")
 		git(root, "commit", "-m", "test: version change")
@@ -95,13 +99,13 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 			if err := json.Unmarshal([]byte(strings.TrimPrefix(strings.TrimSpace(string(data)), "cli-releases=")), &releases); err != nil {
 				t.Fatal(err)
 			}
-			if len(releases) != 3 || !strings.HasPrefix(releases[0].Tag, "apps/sweet/v") || !strings.HasPrefix(releases[1].Tag, "pkg/cli/v") || !strings.HasPrefix(releases[2].Tag, "pkg/sweet/v") || releases[0].Commit != head || releases[1].Commit != head || releases[2].Commit != head {
+			if len(releases) != 3 || !strings.HasPrefix(releases[0].Tag, "sweet@") || !strings.HasPrefix(releases[1].Tag, "cli@") || !strings.HasPrefix(releases[2].Tag, "pkg/sweet/v") || releases[0].Commit != head || releases[1].Commit != head || releases[2].Commit != head {
 				t.Fatalf("wrong publish matrix: %s", data)
 			}
 		}
 	}
 	invoke(base, head, false)
-	for _, name := range []string{"v0.1.0", "pkg/api/v0.1.0"} {
+	for _, name := range []string{"v0.1.0", "api@0.1.0"} {
 		if got := git(remote, "rev-parse", "refs/tags/"+name+"^{commit}"); got != head {
 			t.Fatalf("wrong tag target: %s", got)
 		}
@@ -115,17 +119,17 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 		t.Fatal("rerun changed tags")
 	}
 	next := commit("0.2.0")
-	git(remote, "tag", "pkg/api/v0.2.0", base)
+	git(remote, "tag", "api@0.2.0", base)
 	before = git(remote, "show-ref", "--tags")
 	invoke(head, next, true)
 	if got := git(remote, "show-ref", "--tags"); got != before {
 		t.Fatal("conflicting tag caused a partial push")
 	}
-	git(remote, "tag", "-d", "pkg/api/v0.2.0")
-	git(root, "tag", "-d", "pkg/api/v0.2.0")
+	git(remote, "tag", "-d", "api@0.2.0")
+	git(root, "tag", "-d", "api@0.2.0")
 	before = git(remote, "show-ref", "--tags")
 	hook := filepath.Join(remote, "hooks/update")
-	write(hook, "#!/bin/sh\nif [ \"$1\" = refs/tags/pkg/api/v0.2.0 ]; then exit 1; fi\n")
+	write(hook, "#!/bin/sh\nif [ \"$1\" = refs/tags/api@0.2.0 ]; then exit 1; fi\n")
 	invoke(head, next, true)
 	if got := git(remote, "show-ref", "--tags"); got != before {
 		t.Fatal("remote rejection caused a partial tag push")
@@ -134,7 +138,7 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 		t.Fatal(err)
 	}
 	invoke(head, next, false)
-	for _, name := range []string{"v0.2.0", "pkg/api/v0.2.0"} {
+	for _, name := range []string{"v0.2.0", "api@0.2.0"} {
 		if got := git(remote, "rev-parse", "refs/tags/"+name+"^{commit}"); got != next {
 			t.Fatalf("retry did not finish tag push: %s", got)
 		}

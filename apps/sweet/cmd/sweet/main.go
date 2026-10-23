@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/chattocorp/sweet-release/apps/sweet"
+	"github.com/chattocorp/sweet-release/apps/sweet/core"
 	"github.com/spf13/cobra"
 )
 
@@ -36,6 +37,16 @@ func newRootCommand() *cobra.Command {
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Name() == "doctor" {
+				return nil
+			}
+			root, err := core.RepositoryRoot()
+			if err != nil {
+				return nil
+			}
+			return core.CheckTagPrefixes(root)
+		},
 	}
 	cmd.SetVersionTemplate("{{.Name}} {{.Version}}\n")
 	cmd.AddCommand(newInitCommand())
@@ -44,5 +55,25 @@ func newRootCommand() *cobra.Command {
 	cmd.AddCommand(newChangelogCommand())
 	cmd.AddCommand(newGitCommand())
 	cmd.AddCommand(newChangeCommand())
+	cmd.AddCommand(&cobra.Command{
+		Use: "doctor", Short: "Check package configuration and release tag ownership", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			root, err := core.RepositoryRoot()
+			if err != nil {
+				return err
+			}
+			problems, err := core.DiagnosePackages(root)
+			if err != nil {
+				return err
+			}
+			for _, problem := range problems {
+				cmd.Printf("Warning: %s\n", problem)
+			}
+			if len(problems) == 0 {
+				cmd.Println("No package problems found.")
+			}
+			return nil
+		},
+	})
 	return cmd
 }

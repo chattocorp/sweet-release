@@ -56,8 +56,10 @@ sweet git tag
 ```
 
 The command creates annotated local tags for the current committed package
-versions. Tags use `<package-directory>/v<version>`, or `v<version>` for a root
-package. Each tag targets the commit that introduced the version on first-parent
+versions. Tags use `<directory-name>@<version>`, or `v<version>` for a root
+package. Set `tag-prefix` in `.sweet.yml` to override the text before the version.
+Run `sweet doctor` to check for duplicate prefixes before a release.
+Each tag targets the commit that introduced the version on first-parent
 history, even if other commits followed it. Uncommitted changes, older versions,
 and `0.0.0` versions are excluded.
 

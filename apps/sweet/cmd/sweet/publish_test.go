@@ -25,7 +25,11 @@ func TestCLIPublishing(t *testing.T) {
 		t.Fatalf("build metadata: %v: %s", err, out)
 	}
 	t.Setenv("TEST_METADATA", metadata)
-	for _, releasePackage := range []string{"apps/sweet", "pkg/sweet", "pkg/cli"} {
+	for _, prefix := range []string{"sweet@", "apps/sweet/v", "pkg/sweet/v", "pkg/cli/v"} {
+		releasePackage := strings.TrimSuffix(prefix, "/v")
+		if prefix == "sweet@" {
+			releasePackage = "apps/sweet"
+		}
 		for _, tc := range []struct {
 			name, state, failure, version string
 			wantFailure                   bool
@@ -38,7 +42,7 @@ func TestCLIPublishing(t *testing.T) {
 			{"upload failure", "missing", "upload", "0.1.0", true},
 			{"prerelease", "missing", "", "0.2.0-rc.1", false},
 		} {
-			t.Run(releasePackage+"/"+tc.name, func(t *testing.T) {
+			t.Run(prefix+"/"+tc.name, func(t *testing.T) {
 				root := t.TempDir()
 				write := func(name, data string) {
 					t.Helper()
@@ -72,8 +76,8 @@ echo "$*" >> "$TEST_LOG"
 if [ "$1" = api ]; then
   [ "$TEST_FAILURE" != api ] || exit 1
   case "$TEST_STATE" in
-    draft) printf '{"tag_name":"%s/v%s","draft":true}\n' "$TEST_PACKAGE" "$TEST_VERSION" ;;
-    published) printf '{"tag_name":"%s/v%s","draft":false}\n' "$TEST_PACKAGE" "$TEST_VERSION" ;;
+    draft) printf '{"tag_name":"%s","draft":true}\n' "$TEST_TAG" ;;
+    published) printf '{"tag_name":"%s","draft":false}\n' "$TEST_TAG" ;;
   esac
 fi
 if [ "$2" = upload ] && [ "$TEST_FAILURE" = upload ]; then exit 1; fi
@@ -82,10 +86,11 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 `)
-				cmd := exec.Command("bash", script, releasePackage+"/v"+tc.version, "config.yml")
+				cmd := exec.Command("bash", script, prefix+tc.version, "config.yml")
 				cmd.Dir = root
 				t.Setenv("SWEET_METADATA", filepath.Join(root, "bin/sweet"))
 				t.Setenv("TEST_PACKAGE", releasePackage)
+				t.Setenv("TEST_TAG", prefix+tc.version)
 				cmd.Env = append(os.Environ(), "PATH="+filepath.Join(root, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"), "TEST_LOG="+filepath.Join(root, "log"), "TEST_NOTES="+filepath.Join(root, "notes"), "TEST_STATE="+tc.state, "TEST_FAILURE="+tc.failure, "TEST_VERSION="+tc.version)
 				out, err := cmd.CombinedOutput()
 				if (err != nil) != tc.wantFailure {

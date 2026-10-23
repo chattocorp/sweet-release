@@ -17,6 +17,14 @@ def release(tag):
     return dict(tag_name=tag, draft=False, prerelease=False)
 
 
+class NewTagFormatTest(unittest.TestCase):
+    def test_new_format_wins_equal_version_and_orders_by_version(self):
+        tags = ["apps/sweet/v1.0.0", "sweet@1.0.0", "pkg/cli/v0.9.0"]
+        self.assertEqual(promotion.latest_tag(map(release, tags)), "sweet@1.0.0")
+        tags.append("sweet@1.1.0")
+        self.assertEqual(promotion.latest_tag(map(release, tags)), "sweet@1.1.0")
+
+
 class LatestTagTests(unittest.TestCase):
     def test_numeric_version_order_ignores_publication_order(self):
         tags = ["apps/sweet/v0.9.0", "apps/sweet/v0.10.0", "apps/sweet/v0.2.0"]
