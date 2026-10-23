@@ -27,17 +27,15 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
-          go-version-file: pkg/cli/go.mod
-          cache-dependency-path: |
-            pkg/cli/go.sum
-            pkg/core/go.sum
+          go-version-file: pkg/sweet/go.mod
+          cache-dependency-path: pkg/sweet/go.sum
       - name: Create release tags
         id: tags
         env:
           BASE: ${{ inputs.base }}
           HEAD: ${{ inputs.head }}
         run: |
-          go build -o "$RUNNER_TEMP/sweet" ./pkg/cli/cmd/sweet
+          go build -o "$RUNNER_TEMP/sweet" ./pkg/sweet/cmd/sweet
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           bash .github/scripts/tag-releases.sh "$RUNNER_TEMP/sweet" "$BASE" "$HEAD"

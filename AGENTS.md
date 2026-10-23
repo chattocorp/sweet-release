@@ -14,34 +14,40 @@ or updating issues. Read `issues/means.schema.json` before writing and use
 
 ## Development
 
-The repository uses a Go workspace with two modules:
+The software is one Sweet release package and Go module in `pkg/sweet`:
 
-- `pkg/cli`: the `sweet` CLI, command output, and command integration tests.
-- `pkg/core`: package discovery, manifest parsing, and initialization.
+- `cmd/sweet`: the CLI and command integration tests.
+- `core`: package discovery, release planning, and file updates.
+- `version.go`: the CLI version, updated by the package manifest.
 
-Each module has its own `.sweet.yml` and version. The root holds shared
-`.sweet.config.yml` configuration and `go.work`; it is not a release package.
-The CLI imports the core module. A local replacement in its `go.mod` also lets
-module commands resolve core when workspace mode is disabled.
+The module path is `github.com/chattocorp/sweet-release/pkg/sweet`. Core imports
+use `github.com/chattocorp/sweet-release/pkg/sweet/core`. The root `go.work`
+contains this module; future packages, such as a docs website, can release
+independently. The root is not a release package.
+
+The unified package starts from CLI version 0.1.0 and retains the CLI changelog.
+The retired core changelog in `pkg/sweet/core/CHANGELOG.md` is historical only.
+New tags use `pkg/sweet/v<version>`, which also versions the nested Go module.
+Existing `pkg/cli/v` and `pkg/core/v` tags retain their original source layouts.
 
 With the Go version from `mise.toml` installed, run these commands at the root:
 
 ```sh
-go run ./pkg/cli/cmd/sweet status
-go test ./pkg/cli/... ./pkg/core/...
-go vet ./pkg/cli/... ./pkg/core/...
-go build -o bin/sweet ./pkg/cli/cmd/sweet
+go run ./pkg/sweet/cmd/sweet status
+go test ./pkg/sweet/...
+go vet ./pkg/sweet/...
+go build -o bin/sweet ./pkg/sweet/cmd/sweet
 ```
 
 The equivalent Mise tasks are `mise run sweet -- status`, `mise run check`, and
 `mise run build`. Use `mise run deploy` to install `sweet` into `~/.local/bin`.
-The root has no Go module, so use the module patterns above instead of `go test ./...`.
+Run all Go checks from the repository root.
 
 GitHub Actions runs CI on branch pushes and pull requests. It checks Go formatting,
-runs both modules' tests with race detection, runs `go vet`, and builds the CLI
+runs all tests with race detection, runs `go vet`, and builds the CLI
 on Linux. You can also start the CI workflow manually from the Actions tab.
 To run the additional checks locally, use `gofmt -l pkg` (no output means
-formatting is correct) and `go test -race ./pkg/cli/... ./pkg/core/...`.
+formatting is correct) and `go test -race ./pkg/sweet/...`.
 
 ## Releases
 
@@ -79,15 +85,22 @@ Different fields in a shared file are allowed, but their PRs can have Git confli
 until the next run regenerates them from `main`. Dependency propagation is not
 implemented; selecting per-package mode does not coordinate dependent releases.
 
+Add `--details` to include `releases` and `body` on each planned PR. Each release
+has `path`, display `name`, target `version`, and the new `changelog` entry.
+The rendered `body` includes only these releases. The default JSON shape is
+unchanged. Both modes prepare and validate the same edits as `sweet bump`,
+including changelogs and consumed notes, without writing files. An explicit bump
+selection still validates only the selected packages.
+
 The PR contains updated manifests, changelogs, configured version files, and
 deletions of consumed notes. Notes with no version effect alone do not create a PR.
 Do not add a `branch-suffix`, which would create separate PR branches on each run.
 After merging or closing a PR, a later release can create a new PR.
 The PR description lists each package's target version and new changelog content,
-without previous release history. The workflow collects added changelog lines
-from `git diff` after `sweet bump`. It marks new changelogs with intent-to-add
-so first releases also appear in the diff, and writes the description outside
-the checkout.
+without previous release history. The workflow reads the description from
+`sweet release-pr plan --details` before `sweet bump` and writes it outside the
+checkout. First releases and packages with existing changelogs use the same
+planned content.
 
 Each run regenerates changes from `main`; it does not bump previous release
 branches again. Make corrections through `main`, since edits to generated branches
@@ -168,23 +181,36 @@ tags, reruns, conflicts, atomic rejection, and recovery without contacting GitHu
 ### CLI publishing
 
 After tags are pushed, the tag workflow calls `.github/workflows/release.yml`
-for each `pkg/cli` release in the plan. Core-only releases do not build binaries.
+for each software release in the plan. Only `pkg/sweet` and historical `pkg/cli`
+releases build binaries; docs and retired core releases do not.
 Each job checks out the exact tag commit and verifies it against the planner's
 commit. Jobs for the same tag are serialized. Publishing failures leave tags
 intact; rerunning CI retries publishing, including tags that already exist.
 
 The workflow keeps its own build configuration and script when checking out an
-older tag. You can publish or retry an existing CLI tag from main manually:
+older tag. It selects `pkg/sweet/go.mod` for current source, root `go.mod`
+for the intermediate layout, and `pkg/cli/go.mod` for historical source after
+checkout. The retained check script runs tests and vet for each layout. The tag
+selects the build directory, manifest, and changelog: `pkg/sweet` for new tags
+and `pkg/cli` for historical tags. You can publish or retry
+an existing CLI tag from main manually:
 
 ```sh
-gh workflow run release.yml --ref main -f tag=pkg/cli/v0.1.0
+gh workflow run release.yml --ref main -f tag=pkg/sweet/v0.1.0
 ```
 
 GoReleaser's free edition builds archives in snapshot mode with an explicit
 release version, avoiding its Pro-only support for prefixed tags. GitHub CLI
-publishes the artifacts against the existing `pkg/cli/v<version>` tag. No extra
+publishes the artifacts against the existing package tag. No extra
 tags are created. The job checks the Linux binary's version and archive checksums
 before upload. Release notes come from that version's CLI changelog section.
+
+`sweet release-notes <changelog> --version <version>` reads one release body from
+an existing changelog. It excludes the version heading and earlier history,
+preserves the body, and ignores headings inside fenced code blocks. A missing
+version is an error. This command needs no repository configuration. Publishing
+uses the current metadata binary to read the tagged changelog, so older source
+tags do not need to support this command.
 
 Uploads go to a draft release, which is published only after all uploads succeed.
 A retry replaces assets in an unfinished draft; an already published release is
@@ -203,7 +229,7 @@ The snapshot runs tests and static checks, then creates archives and SHA-256
 checksums in `dist/` without publishing. It builds `sweet` for Linux, macOS,
 and Windows on amd64 and arm64. Windows archives use ZIP; the others use tar.gz.
 The binary's `--version` output contains the release or snapshot version.
-Local builds default to `cli.Version` in `pkg/cli/version.go`. The CLI package's
+Local builds default to `sweet.Version` in `pkg/sweet/version.go`. The Sweet package's
 `version-files` entry updates its annotated constant during `sweet bump`.
 The `-X main.version=...` linker option overrides the displayed version
 for release and snapshot builds.
@@ -316,7 +342,7 @@ calculate versions. `sweet bump` uses the sections to generate changelog entries
 
 ```sh
 sweet bump                    # Choose pending releases interactively
-sweet bump pkg/core pkg/cli   # Prepare multiple packages from the repository root
+sweet bump pkg/api pkg/web   # Prepare multiple packages from the repository root
 sweet bump .                  # Prepare the package in the current directory
 sweet bump --all              # Prepare all eligible packages from any directory
 ```
@@ -471,8 +497,8 @@ such as `code --wait`; they run through `sh`. Sweet waits for the editor to exit
 and keeps the file if the editor fails.
 
 ```sh
-sweet change pkg/core
-printf 'Add package discovery.\n' | sweet change pkg/cli --type feature --stdin
+sweet change pkg/sweet
+printf 'Add package discovery.\n' | sweet change pkg/sweet --type feature --stdin
 ```
 
 `--stdin` writes input verbatim as the Markdown body below the generated frontmatter

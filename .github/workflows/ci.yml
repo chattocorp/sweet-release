@@ -24,10 +24,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: pkg/cli/go.mod
-          cache-dependency-path: |
-            pkg/cli/go.sum
-            pkg/core/go.sum
+          go-version-file: pkg/sweet/go.mod
+          cache-dependency-path: pkg/sweet/go.sum
       - name: Check formatting
         run: |
           unformatted=$(gofmt -l pkg)
@@ -36,11 +34,11 @@ jobs:
             exit 1
           fi
       - name: Test with race detection
-        run: go test -race ./pkg/cli/... ./pkg/core/...
+        run: go test -race ./pkg/sweet/...
       - name: Run static checks
-        run: go vet ./pkg/cli/... ./pkg/core/...
+        run: go vet ./pkg/sweet/...
       - name: Build CLI
-        run: go build -o bin/sweet ./pkg/cli/cmd/sweet
+        run: go build -o bin/sweet ./pkg/sweet/cmd/sweet
 
   tag:
     needs: check

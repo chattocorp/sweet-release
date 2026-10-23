@@ -26,7 +26,7 @@ else
 fi
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-  printf 'cli-releases=%s\n' "$(jq -c '[.[] | select(.package == "pkg/cli") | {tag: .name, commit: .commit}]' <<< "$plan")" >> "$GITHUB_OUTPUT"
+  printf 'cli-releases=%s\n' "$(jq -c '[.[] | select(.package == "pkg/sweet" or .package == "pkg/cli") | {tag: .name, commit: .commit}]' <<< "$plan")" >> "$GITHUB_OUTPUT"
 fi
 
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then

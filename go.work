@@ -1,6 +1,3 @@
 go 1.27.0
 
-use (
-./pkg/cli
-./pkg/core
-)
+use ./pkg/sweet
