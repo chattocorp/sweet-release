@@ -40,6 +40,24 @@ types above. Invalid type definitions are errors. Pull request policy belongs to
 your automation, not Sweet's configuration. The former `release-pr` setting is
 no longer used and can be removed from existing configuration files.
 
+### Changelog source repository
+
+By default, Sweet infers changelog source links from the GitHub `origin` remote
+(HTTPS, SSH URL, or `git@github.com:owner/repo.git` syntax). Set `repository` in
+`.sweet.config.yml` to override the inferred URL:
+
+```yaml
+repository: https://github.com/owner/repo
+```
+
+The value must be an HTTPS repository URL without credentials, query parameters,
+or a fragment. A trailing `.git` is removed. Explicit URLs can name
+GitHub-compatible hosts with `/owner/repo`, `/pull/number`, and `/commit/sha`
+routes. Other Git hosts are not inferred automatically. This setting only controls
+source links; it does not configure release PR automation. See
+[links to commits and pull requests](/guides/release-notes/#links-to-commits-and-pull-requests)
+for history requirements and PR subject patterns.
+
 ## Package manifest
 
 Each package needs `.sweet.yml`:

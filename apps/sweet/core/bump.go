@@ -77,6 +77,7 @@ func prepareReleases(root string, paths []string) (*releasePreparation, error) {
 	versionFiles := map[string]*versionFilePlan{}
 	var releases []PackageStatus
 	plan := &releasePreparation{}
+	repository := sourceRepository(root, config)
 	for _, status := range selected {
 		if len(status.Changes) == 0 || status.Bump == "none" {
 			continue
@@ -138,7 +139,11 @@ func prepareReleases(root string, paths []string) (*releasePreparation, error) {
 		if strings.TrimSpace(introduction) == "" {
 			introduction = "# " + status.DisplayName() + " Changelog\n"
 		}
-		entry := releaseEntry(status, types)
+		links := make(map[string]string)
+		for _, change := range status.Changes {
+			links[change.Path] = sourceLink(root, repository, change.Path)
+		}
+		entry := releaseEntryWithLinks(status, types, links)
 		changelog.after = []byte(insertRelease(introduction, entry))
 		edits = append(edits, manifest, changelog)
 		for _, change := range status.Changes {
@@ -219,6 +224,10 @@ func (e releaseEdit) restore() error {
 }
 
 func releaseEntry(status PackageStatus, types []ChangeType) string {
+	return releaseEntryWithLinks(status, types, nil)
+}
+
+func releaseEntryWithLinks(status PackageStatus, types []ChangeType, links map[string]string) string {
 	var out strings.Builder
 	fmt.Fprintf(&out, "## %s\n", status.NextVersion)
 	var sections []string
@@ -244,6 +253,13 @@ func releaseEntry(status PackageStatus, types []ChangeType) string {
 			}
 			if body != "" {
 				lines := strings.Split(body, "\n")
+				if link := links[change.Path]; link != "" {
+					if len(lines) == 1 {
+						lines[0] += " (" + link + ")"
+					} else {
+						lines = append(lines, "", "("+link+")")
+					}
+				}
 				lines[0] = "- " + lines[0]
 				for i := 1; i < len(lines); i++ {
 					if lines[i] != "" {

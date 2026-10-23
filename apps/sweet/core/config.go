@@ -42,10 +42,12 @@ type ChangeType struct {
 // RepositoryConfig contains shared release settings. ChangeTypes retains YAML order.
 type RepositoryConfig struct {
 	ChangeTypes []ChangeType
+	Repository  string
 }
 
 type repositoryConfigNodes struct {
-	Types yaml.Node `yaml:"types"`
+	Types      yaml.Node `yaml:"types"`
+	Repository string    `yaml:"repository"`
 }
 
 func decodeRepositoryConfig(data []byte) (repositoryConfigNodes, error) {
@@ -84,7 +86,10 @@ func parseRepositoryConfig(data []byte) (RepositoryConfig, error) {
 	if err != nil {
 		return RepositoryConfig{}, err
 	}
-	return RepositoryConfig{ChangeTypes: types}, nil
+	if nodes.Repository != "" && repositoryURL(nodes.Repository, false) == "" {
+		return RepositoryConfig{}, fmt.Errorf("repository must be an HTTPS repository URL, for example https://github.com/owner/repo")
+	}
+	return RepositoryConfig{ChangeTypes: types, Repository: repositoryURL(nodes.Repository, false)}, nil
 }
 
 // ChangeTypes loads shared types from the package's Git repository root.
