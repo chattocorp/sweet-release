@@ -8,9 +8,17 @@ import (
 	"testing"
 )
 
-func TestChangelogExtractCommand(t *testing.T) {
-	// No repository, configuration, or historical CLI source is required.
-	path := filepath.Join(t.TempDir(), "CHANGELOG.md")
+func TestChangelogShowCommand(t *testing.T) {
+	// Explicit packages need no repository configuration or historical CLI source.
+	root := t.TempDir()
+	dir := filepath.Join(root, "package with spaces")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".sweet.yml"), []byte("version: 9.0.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "CHANGELOG.md")
 	if err := os.WriteFile(path, []byte("# Log\n\n## 1.0.0\n\nNew\n\n## 0.1.0\nOld\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -19,19 +27,35 @@ func TestChangelogExtractCommand(t *testing.T) {
 		want    string
 		success bool
 	}{
-		{[]string{path, "--version", "1.0.0"}, "\nNew\n\n", true},
-		{[]string{path, "--version", "0.1.0"}, "Old\n", true},
-		{[]string{path, "--version", "2.0.0"}, "", false},
+		{[]string{dir, "--version", "1.0.0"}, "\nNew\n\n", true},
+		{[]string{dir, "--version", "0.1.0"}, "Old\n", true},
+		{[]string{dir, "--version", "2.0.0"}, "", false},
+		{[]string{dir}, "\nNew\n\n", true},
+		{[]string{dir + ".missing"}, "", false},
 		{[]string{path}, "", false},
-		{[]string{path + ".missing", "--version", "1.0.0"}, "", false},
-		{[]string{"--version", "1.0.0"}, "", false},
-		{[]string{path, path, "--version", "1.0.0"}, "", false},
+		{[]string{dir, dir}, "", false},
 	} {
 		var out, stderr bytes.Buffer
-		code := run(append([]string{"changelog", "extract"}, tc.args...), &out, &stderr)
+		code := run(append([]string{"changelog", "show"}, tc.args...), &out, &stderr)
 		if (code == 0) != tc.success || out.String() != tc.want {
 			t.Fatalf("%v: code %d, out %q, err %s", tc.args, code, out.String(), &stderr)
 		}
+	}
+	t.Chdir(dir)
+	var latest, latestErr bytes.Buffer
+	if code := run([]string{"changelog", "show"}, &latest, &latestErr); code != 0 || latest.String() != "\nNew\n\n" {
+		t.Fatalf("current package: %d, %s, %s", code, &latest, &latestErr)
+	}
+	t.Chdir(root)
+	latest.Reset()
+	latestErr.Reset()
+	if code := run([]string{"changelog", "show", "package with spaces"}, &latest, &latestErr); code != 0 || latest.String() != "\nNew\n\n" {
+		t.Fatalf("relative package: %d, %s, %s", code, &latest, &latestErr)
+	}
+	latest.Reset()
+	latestErr.Reset()
+	if code := run([]string{"changelog", "show"}, &latest, &latestErr); code == 0 || !strings.Contains(latestErr.String(), "sweet changelog show <package>") {
+		t.Fatalf("missing current package: %d, %s", code, &latestErr)
 	}
 	var out, stderr bytes.Buffer
 	if code := run([]string{"release-notes"}, &out, &stderr); code == 0 || !strings.Contains(stderr.String(), "unknown command") {

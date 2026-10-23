@@ -3,6 +3,8 @@ type: feature
 breaking: true
 ---
 
-Rename `sweet release-notes` to `sweet changelog extract <file> --version <version>`.
-The command retains the same output and validation. Update scripts to use the
-new command; the old name is no longer available.
+Replace `sweet release-notes <file>` with `sweet changelog show [package]`.
+Select a package directory instead of a changelog file. With no package argument,
+use the current package or choose one interactively. Show the latest changelog
+release by default, or select one with `--version <version>`. The output remains
+the release body without its version heading. The old command is removed.
