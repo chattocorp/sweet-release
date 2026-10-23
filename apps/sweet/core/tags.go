@@ -164,7 +164,11 @@ func PlanCurrentTags(root string) ([]ReleaseTag, error) {
 		if len(pending) == 0 {
 			break
 		}
-		previous, err := tagVersions(root, commit)
+		packages := make(map[string]bool, len(pending))
+		for pkg := range pending {
+			packages[pkg] = true
+		}
+		previous, err := tagVersionsForPackages(root, commit, packages)
 		if err != nil {
 			return nil, err
 		}
@@ -210,6 +214,11 @@ func CreateReleaseTags(root string, tags []ReleaseTag) error {
 }
 
 func tagVersions(root, commit string) (map[string]string, error) {
+	return tagVersionsForPackages(root, commit, nil)
+}
+
+// A nil selection reads all packages; otherwise only selected manifests are read.
+func tagVersionsForPackages(root, commit string, packages map[string]bool) (map[string]string, error) {
 	tree, err := tagGit(root, "ls-tree", "-r", "-z", commit)
 	if err != nil {
 		return nil, err
@@ -218,6 +227,9 @@ func tagVersions(root, commit string) (map[string]string, error) {
 	for _, record := range strings.Split(tree, "\x00") {
 		metadata, file, ok := strings.Cut(record, "\t")
 		if !ok || path.Base(file) != ".sweet.yml" {
+			continue
+		}
+		if packages != nil && !packages[path.Dir(file)] {
 			continue
 		}
 		fields := strings.Fields(metadata)

@@ -258,3 +258,16 @@ func TestCurrentTagsRejectShallowHistory(t *testing.T) {
 		t.Fatalf("accepted shallow history: %v", err)
 	}
 }
+
+func TestCurrentTagsIgnoreUnrelatedHistoricalManifests(t *testing.T) {
+	root, git, write, commit := tagFixture(t)
+	write(".sweet.yml", "version: 1.0.0\n")
+	write("retired/.sweet.yml", "version: unfinished\n")
+	release := commit()
+	git("rm", "retired/.sweet.yml")
+	commit()
+	tags, err := PlanCurrentTags(root)
+	if err != nil || len(tags) != 1 || tags[0].Commit != release {
+		t.Fatalf("unrelated historical manifest blocked current release: %+v, %v", tags, err)
+	}
+}
