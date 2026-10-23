@@ -150,6 +150,42 @@ func TestSourceLinkMultiline(t *testing.T) {
 	}
 }
 
+func TestSourceLinkWrappedParagraph(t *testing.T) {
+	const link = "[#42](https://github.com/owner/repo/pull/42)"
+	for _, breaking := range []bool{false, true} {
+		status := PackageStatus{NextVersion: "1.1.0", Changes: []Change{{
+			Path: "note", Type: "feature", Breaking: breaking,
+			Body: "\n  Show help when running `sweet` without a command.\nUse `sweet change` to write release notes. \t\n\n",
+		}}}
+		got := releaseEntryWithLinks(status, []ChangeType{{Name: "feature", Section: "Features"}}, map[string]string{"note": link})
+		prefix := "- "
+		if breaking {
+			prefix += "⚠️ **BREAKING CHANGE:** "
+		}
+		want := "## 1.1.0\n\n### Features\n\n" + prefix + "Show help when running `sweet` without a command.\n  Use `sweet change` to write release notes. (" + link + ")\n"
+		if got != want {
+			t.Fatalf("breaking=%v: got %q, want %q", breaking, got, want)
+		}
+	}
+}
+
+func TestSourceLinkStructuredMarkdown(t *testing.T) {
+	for _, body := range []string{
+		"First paragraph.\n\nSecond paragraph.",
+		"Example:\n```go\nCall()\n```",
+		"Items:\n- First\n- Second",
+		"Heading\n=======",
+		"Example:\n\n    Call()",
+		"| Column |\n| --- |\n| Value |",
+	} {
+		status := PackageStatus{NextVersion: "1.1.0", Changes: []Change{{Path: "note", Type: "feature", Body: body}}}
+		got := releaseEntryWithLinks(status, []ChangeType{{Name: "feature", Section: "Features"}}, map[string]string{"note": "source"})
+		if !strings.HasSuffix(got, "\n\n  (source)\n") {
+			t.Fatalf("body %q: got %q", body, got)
+		}
+	}
+}
+
 func TestSourceUnicodePath(t *testing.T) {
 	root := sourceTestRepo(t)
 	path := "paquet-é/.sweet/note.md"
