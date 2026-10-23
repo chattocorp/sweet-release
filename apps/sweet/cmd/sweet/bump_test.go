@@ -65,7 +65,7 @@ func TestBumpWorkflow(t *testing.T) {
 		}
 	}
 	changelog := read("api/CHANGELOG.md")
-	want := "# api Changelog\n\n## 1.3.0\n\n### Added\n\n- New API.\n\n  ```go\n  call()\n  ```\n\n- Updated guide.\n"
+	want := "# api Changelog\n\n## 1.3.0\n\n### Added\n\n- New API.\n\n  ```go\n  call()\n  ```\n- Updated guide.\n"
 	if changelog != want {
 		t.Fatalf("changelog = %q, want %q", changelog, want)
 	}
