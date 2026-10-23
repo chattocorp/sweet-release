@@ -45,8 +45,18 @@ tags do not need to support this command.
 Uploads go to a draft release, which is published only after all uploads succeed.
 A retry replaces assets in an unfinished draft; an already published release is
 left unchanged. API errors stop the job. Prerelease versions produce GitHub
-prereleases. The workflow does not move GitHub's Latest designation, so publishing
-an older tag cannot replace a newer release's designation.
+prereleases. After publishing, a separate job sets GitHub's Latest designation to
+the highest published stable CLI version. It compares semantic versions across
+`apps/sweet/v`, `pkg/sweet/v`, and `pkg/cli/v` tags. Drafts, prereleases, and other
+packages are excluded. Equal versions prefer the current package prefix, then
+`pkg/sweet`, then `pkg/cli`; build metadata does not affect version precedence,
+and equal-version tags within a prefix use lexical order as a deterministic tie-break.
+
+Promotion jobs share a repository-wide concurrency group and read releases only
+after acquiring it. Each job reconciles all published CLI releases, so publishing
+an older tag cannot displace a newer stable version. Promotion also runs when the
+publisher skips an existing release. If promotion fails, rerun the release workflow;
+it retries promotion without rebuilding or replacing published assets.
 
 Install the tools with `mise install`, then run these commands from the root:
 

@@ -77,3 +77,20 @@ jobs:
           SWEET_METADATA: ${{ runner.temp }}/sweet-metadata
           SWEET_GO_CHECK: ${{ runner.temp }}/check-go.sh
         run: bash "$RUNNER_TEMP/publish-cli.sh" "$TAG" "$RUNNER_TEMP/goreleaser.yml"
+
+  promote-latest:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Different tags can build concurrently, but Latest is repository-wide.
+    # A replacement queued job reconciles all releases, not only its own tag.
+    concurrency:
+      group: promote-latest-cli
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - name: Promote highest stable CLI release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 .github/scripts/promote-latest.py
