@@ -131,7 +131,7 @@ After merging or closing a PR, a later release can create a new PR.
 The PR description lists each package's target version and new changelog content,
 without previous release history. After bumping, the workflow reads the new
 versions with `sweet status --json` and extracts their sections with
-`sweet release-notes`. Descriptions and cleanup results stay outside the checkout
+`sweet changelog`. Descriptions and cleanup results stay outside the checkout
 so they cannot turn a no-op bump into a PR.
 
 Each run regenerates changes from `main`; it does not bump previous release
@@ -257,10 +257,18 @@ publishes the artifacts against the existing package tag. No extra
 tags are created. The job checks the Linux binary's version and archive checksums
 before upload. Release notes come from that version's CLI changelog section.
 
-`sweet release-notes <changelog> --version <version>` reads one release body from
-an existing changelog. It excludes the version heading and earlier history,
+`sweet changelog [package] --version <version>` reads one release body from
+the package's `CHANGELOG.md`. The package is a directory path relative to the current
+directory and must contain a valid `.sweet.yml`. With no argument, the command uses
+the current package or offers the package picker when a terminal is available.
+Without a terminal, pass a package path if the current directory is not a package.
+Without `--version`, it selects the first semantic-version heading in changelog
+order, skipping headings such as `Unreleased` and headings in fenced code blocks.
+It does not use pending notes or the manifest version to select the latest entry.
+It excludes the version heading and earlier history,
 preserves the body, and ignores headings inside fenced code blocks. A missing
-version is an error. This command needs no repository configuration. Publishing
+version, missing changelog, or changelog without released versions is an error.
+Explicit packages need no repository configuration. Publishing
 uses the current metadata binary to read the tagged changelog, so older source
 tags do not need to support this command.
 
