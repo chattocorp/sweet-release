@@ -1,4 +1,5 @@
-name: Sweet Release Docs
+name: sweet-docs
+display-name: Sweet Release Docs
 version: 0.0.0
 version-files:
   - path: package.json

@@ -45,7 +45,7 @@ func TestDisplayNamesDoNotIdentifyPackages(t *testing.T) {
 	root, write := releasePRFixture(t)
 	write(".sweet.config.yml", "release-pr: {strategy: per-package}\n")
 	for _, path := range []string{"a", "b"} {
-		write(path+"/.sweet.yml", "version: 1.0.0\nname: Shared Name\n")
+		write(path+"/.sweet.yml", "version: 1.0.0\ndisplay-name: Shared Name\n")
 		write(path+"/.sweet/note.md", "---\ntype: feature\n---\nNew feature.\n")
 	}
 	prs, err := PlanReleasePRs(root)
@@ -114,7 +114,7 @@ func TestReleasePRDetailsMatchPreparedContent(t *testing.T) {
 			root, write := releasePRFixture(t)
 			write(".sweet.config.yml", "release-pr: {strategy: "+strategy+"}\n")
 			for _, path := range []string{"a", "b"} {
-				write(path+"/.sweet.yml", "version: 1.0.0\nname: Package "+path+"\n")
+				write(path+"/.sweet.yml", "version: 1.0.0\ndisplay-name: Package "+path+"\n")
 				write(path+"/.sweet/feature.md", "---\ntype: feature\n---\nNew feature.\n\n```md\n## Example\n```\n")
 				write(path+"/.sweet/chore.md", "---\ntype: chore\n---\nHidden chore.\n")
 			}
@@ -151,7 +151,7 @@ func TestReleasePRDetailsMatchPreparedContent(t *testing.T) {
 					if err != nil || strings.TrimSpace(notes) != strings.TrimSpace(expected) {
 						t.Fatalf("planned content differs: %s, %v", data, err)
 					}
-					if !strings.Contains(detail.Body, "## "+release.Name) || !strings.Contains(detail.Body, "Target version: **"+release.Version+"**") {
+					if !strings.Contains(detail.Body, "## "+release.DisplayName) || !strings.Contains(detail.Body, "Target version: **"+release.Version+"**") {
 						t.Fatalf("missing metadata: %s", detail.Body)
 					}
 				}

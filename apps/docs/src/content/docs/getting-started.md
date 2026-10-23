@@ -35,6 +35,18 @@ Repository policies live in `.sweet.config.yml`. Each package starts at version
 preserves existing files. For an existing project, set the manifest version to
 the version from which you want to calculate future releases.
 
+Optionally, give each package a machine-readable name and a display label:
+
+```yaml
+name: api
+display-name: My API
+version: 0.0.0
+```
+
+Without `name`, the package uses its repository-relative path. Display labels
+fall back to `name`, then the path. See [Package manifest](../reference/configuration/#package-manifest)
+for naming rules and migration from the previous display-only `name` field.
+
 ## Describe a change
 
 For a package in the current directory:
@@ -48,11 +60,14 @@ to write a longer note in `$EDITOR`. Running `sweet` without a command starts
 the same workflow.
 
 For a package elsewhere, pass its directory: `sweet change pkg/api`.
+If you configured `name: api`, use `sweet change --package api` from any directory
+in the repository.
 
 ## Prepare the release
 
 ```sh
 sweet status
+sweet doctor
 sweet bump .
 git diff
 ```
@@ -60,6 +75,9 @@ git diff
 With the default policies, a `feature` note bumps a new package from `0.0.0` to
 `0.1.0`. Sweet updates the manifest, creates `CHANGELOG.md`, and removes consumed
 notes. It also updates any configured version files.
+
+`sweet doctor` checks manifests, notes, and package name uniqueness. It changes
+no files and exits with an error if it finds problems.
 
 Review and commit the changes, then use your project's tagging and publishing
 process. See [Prepare a release](../guides/prepare-a-release/) for package

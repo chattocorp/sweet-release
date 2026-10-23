@@ -4,6 +4,12 @@ Sweet Release is a Go CLI for releasing packages from Markdown change files.
 Keep [README.md](README.md) concise and focused on features and the user workflow.
 Keep development instructions and detailed behavior in this file.
 
+Keep the documentation website in `apps/docs/src/content/docs/` up to date with
+every new or changed user-facing feature. Update the relevant guides, examples,
+and reference pages in the same change as the implementation. Document migration
+steps for breaking changes. Add new pages to `apps/docs/astro.config.mjs` when
+needed, and run `mise run docs:check` and `mise run docs:build` after docs changes.
+
 ## Issues
 
 We use **Means** for issue tracking. Issues live in the Git-tracked `issues/`
@@ -122,7 +128,7 @@ until the next run regenerates them from `main`. Dependency propagation is not
 implemented; selecting per-package mode does not coordinate dependent releases.
 
 Add `--details` to include `releases` and `body` on each planned PR. Each release
-has `path`, display `name`, target `version`, and the new `changelog` entry.
+has `path`, effective `name`, resolved `displayName`, target `version`, and the new `changelog` entry.
 The rendered `body` includes only these releases. The default JSON shape is
 unchanged. Both modes prepare and validate the same edits as `sweet bump`,
 including changelogs and consumed notes, without writing files. An explicit bump
@@ -290,22 +296,34 @@ New package manifests start with:
 version: 0.0.0
 ```
 
-Add an optional display name, for example `name: Sweet Release`. It must be a
-non-empty single-line string without surrounding whitespace. Names need not be
-unique and never affect package selection, branch names, or version tags. When
-omitted, the repository-relative path is the display name (`.` for a root package).
-`sweet init package` leaves the name unset.
+Add an optional machine-readable name, for example `name: sweet`. Explicit names
+start with a lowercase letter and contain only lowercase letters, digits, and
+hyphens. When omitted, the name is the repository-relative path (`.` for a root
+package), retaining any slashes or spaces. `sweet init package` leaves it unset.
+
+Add an optional `display-name: Sweet Release` for presentation. It must be a
+non-empty single-line string without surrounding whitespace. Display labels need
+not be unique. The display fallback is `display-name`, then `name`, then path.
+Move existing human-readable `name` values to `display-name`; this migration is
+explicit, even when the old label is also a valid identifier.
+
+`sweet change --package sweet` and `sweet bump --package sweet` select by effective
+name from any repository directory. Repeat `--package` for multiple bump targets.
+Unknown or ambiguous names fail before writing. Do not mix name selectors with
+positional directories or `--all`. Positional paths retain their existing meaning.
+Names do not change release branches or version tags.
 
 Display names appear in per-package PR titles, package headings in release PRs,
 and new changelog titles (`# <display name> Changelog`). Existing changelog
-introductions are preserved. CLI publishing reads the name from the tagged
+introductions are preserved. CLI publishing reads the display label from the tagged
 manifest for the GitHub Release title; already published releases remain unchanged.
 The workflow builds a current metadata reader before checking out older source
 tags, so it can read manifests even when the tagged CLI predates this feature.
 
 `sweet status --json` exposes the inventory for automation, including `path`,
-optional `name`, `version`, `changes`, `bump`, `nextVersion`, and `problems`.
-The default status table continues to show paths.
+effective `name`, optional `displayName`, `version`, `changes`, `bump`, `nextVersion`, and `problems`.
+The default status table shows effective package names, falling back to paths
+when names are omitted. Display labels do not replace names in the table.
 
 `sweet status` shows a repository-wide inventory from any directory:
 
@@ -337,6 +355,17 @@ in the `BUMP` column and no next version; other packages still show their status
 The command succeeds when it can complete the inventory, even if it finds file
 problems. Repository discovery and configuration failures still stop the command.
 Package names are not required. Dependency propagation is not yet implemented.
+
+`sweet doctor` runs the same inventory checks as `sweet status` and also checks
+that effective package names are unique across the repository. This includes
+conflicts between explicit names and path defaults. Each duplicate report
+lists the conflicting manifest paths. The command works from any directory in
+the repository and changes no files. It exits with code 0 when no problems are
+found and code 2 for reported problems or repository/configuration failures.
+`sweet doctor --json` prints a JSON array of `{path, message}` problems (`[]` on
+success); fatal discovery/configuration errors go to stderr instead. Status keeps
+its existing inventory output and exit behavior. Doctor does not prepare releases
+or validate version-file target contents; those checks remain part of bump planning.
 
 `sweet init repo` starts `.sweet.config.yml` with:
 

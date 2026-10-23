@@ -47,7 +47,8 @@ initialization explicitly writes `per-package`. Unknown settings within
 Each package needs `.sweet.yml`:
 
 ```yaml
-name: My API
+name: api
+display-name: My API
 version: 1.2.3
 version-files:
   - path: package.json
@@ -55,10 +56,28 @@ version-files:
     key: version
 ```
 
-`version` must be a complete semantic version. The optional `name` must be a
-non-empty single-line string without surrounding whitespace. It supplies a
-display name for changelogs and releases. Paths still identify packages and
-determine tag names. Without a name, the repository-relative path is used.
+`version` must be a complete semantic version. The optional `name` starts with a
+lowercase letter and contains only lowercase letters, digits, and hyphens.
+When omitted, it defaults to the repository-relative path (`.` for the root).
+Path defaults retain their slashes and spaces. `sweet init package` leaves both
+name fields unset.
+
+The optional `display-name` is a non-empty single-line string without surrounding
+whitespace. Changelogs and release titles use `display-name`, then `name`, then
+the path. Display labels need not be unique. Doctor checks effective package names,
+including conflicts between explicit names and path defaults.
+
+Use `sweet change --package api` or `sweet bump --package api` to select by name
+from any directory. Repeat `--package` with bump to select several packages.
+Name selection rejects ambiguous names, including readable names in manifests
+with invalid versions or other invalid fields. The selected manifest must be valid.
+Positional arguments remain directory
+paths; do not combine them with `--package` or combine `--package` with `--all`.
+Tags and release branch names still use package directories.
+
+Previously, `name` held a display label. Move that value to `display-name` and
+optionally add a machine-readable `name`. This is a configuration change; labels
+are not automatically converted to identifiers.
 
 ## Version files
 

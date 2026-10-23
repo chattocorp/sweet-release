@@ -13,15 +13,19 @@
 Sweet tracks each package's version in `.sweet.yml` and its pending changes in
 `.sweet/*.md`. Repository-wide policies live in `.sweet.config.yml`.
 
-An optional `name` in `.sweet.yml` supplies a display name for changelogs and
-releases. Names need not be unique; paths still identify packages and determine tags.
+An optional machine-readable `name` in `.sweet.yml` identifies a package and
+defaults to its repository-relative path. An optional `display-name` supplies a
+label for changelogs and releases, falling back to `name`, then the path.
+`sweet doctor` checks for duplicate names. Tags still use package directories.
 
 ```sh
 sweet init repo               # Initialize repository configuration
 sweet init package pkg/api    # Initialize an existing package directory
 sweet change pkg/api          # Write a release note
 sweet status                  # Preview version bumps across the repository
+sweet doctor                  # Check consistency and package name uniqueness
 sweet bump pkg/api            # Prepare the package's next release
+sweet bump --package api      # Select by package name instead of directory
 ```
 
 Each note has a change type and a Markdown body, with an optional breaking-change

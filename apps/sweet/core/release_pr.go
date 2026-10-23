@@ -125,7 +125,7 @@ func describeReleasePR(pr ReleasePR, releases []PlannedRelease) ReleasePRDetails
 	body.WriteString("This PR prepares the following releases:\n")
 	for _, release := range releases {
 		_, notes, _ := strings.Cut(release.Changelog, "\n")
-		fmt.Fprintf(&body, "\n## %s\n\nTarget version: **%s**\n%s", release.Name, release.Version, notes)
+		fmt.Fprintf(&body, "\n## %s\n\nTarget version: **%s**\n%s", release.DisplayName, release.Version, notes)
 	}
 	return ReleasePRDetails{pr, releases, body.String()}
 }

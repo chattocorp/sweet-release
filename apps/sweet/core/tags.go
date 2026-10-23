@@ -139,7 +139,8 @@ func tagVersions(root, commit string) (map[string]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		version, err := readPackageVersion([]byte(content))
+		manifest, err := parsePackageManifestNames([]byte(content), true)
+		version := manifest.Version
 		if err == nil {
 			_, err = nextVersion(version, "none")
 		}

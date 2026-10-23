@@ -11,12 +11,16 @@ import (
 
 func newBumpCommand() *cobra.Command {
 	var all bool
+	var names []string
 	cmd := &cobra.Command{
 		Use:   "bump [package...]",
 		Short: "Update versions and changelogs, then consume release notes",
 		Long:  "Prepare releases for the given package directories, or choose pending releases interactively.\nUse --all to prepare all packages. This changes local files without committing or publishing.",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(names) > 0 && (all || len(args) > 0) {
+				return fmt.Errorf("use --package names, package directories, or --all separately")
+			}
 			if all && len(args) > 0 {
 				return fmt.Errorf("use either a package directory or --all")
 			}
@@ -25,7 +29,14 @@ func newBumpCommand() *cobra.Command {
 				return err
 			}
 			var paths []string
-			if !all && len(args) == 0 {
+			for _, name := range names {
+				pkg, err := core.ResolvePackageName(root, name)
+				if err != nil {
+					return err
+				}
+				paths = append(paths, pkg.Path)
+			}
+			if !all && len(args) == 0 && len(names) == 0 {
 				paths, err = selectBumpPackages(cmd, root)
 				if err != nil {
 					return err
@@ -68,6 +79,7 @@ func newBumpCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "Prepare releases for all packages in the repository")
+	cmd.Flags().StringArrayVar(&names, "package", nil, "Select a package by name (repeat for multiple packages)")
 	return cmd
 }
 

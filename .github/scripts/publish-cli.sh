@@ -13,7 +13,7 @@ esac
 version=${tag#"$package/v"}
 [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse --verify "refs/tags/$tag^{commit}")" ]]
-name=$("$metadata" status --json | jq -er --arg package "$package" '.[] | select(.path == $package) | if (.name // "") == "" then .path else .name end')
+name=$("$metadata" status --json | jq -er --arg package "$package" '.[] | select(.path == $package) | .displayName // .name // .path')
 
 # Listing fails on API/auth errors rather than treating them as a missing release.
 releases=$(gh api --paginate 'repos/{owner}/{repo}/releases?per_page=100' --jq '.[] | {tag_name, draft}')

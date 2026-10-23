@@ -17,12 +17,32 @@ Without a package argument, Sweet uses the current directory if it is a package.
 Otherwise, a searchable picker lists packages when a terminal is available.
 Press Esc to cancel without creating a note.
 
+## Select a package by name
+
+For a package with `name: api` in its manifest, use:
+
+```sh
+sweet change --package api
+```
+
+Names resolve from any directory in the repository. When `name` is omitted,
+use the repository-relative path as the name, such as `--package pkg/api`.
+
+Positional directory arguments are relative to the current directory instead.
+Do not combine `--package` with a directory argument. Unknown or ambiguous names
+stop the command before it writes a note. See [Package manifest](../../reference/configuration/#package-manifest)
+for name and display label configuration.
+
+Existing malformed notes do not prevent creating a note by name. Correct those
+notes before running `sweet bump`, which validates all pending notes in the selection.
+
 ## Write from a script
 
 Pass both `--type` and `--stdin` for non-interactive use:
 
 ```sh
 printf 'Add package discovery.\n' | sweet change pkg/api --type feature --stdin
+printf 'Add an endpoint.\n' | sweet change --package api --type feature --stdin
 ```
 
 Input is the Markdown body, without frontmatter. Sweet writes it verbatim below

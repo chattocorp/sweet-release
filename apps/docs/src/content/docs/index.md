@@ -10,6 +10,7 @@ monorepo independently.
 ```sh
 sweet change pkg/api   # Describe a change
 sweet status           # Review pending versions
+sweet doctor           # Check consistency and package name uniqueness
 sweet bump pkg/api     # Update version files and the changelog
 ```
 
@@ -22,6 +23,8 @@ and changelog section. Notes travel with your code through review.
 ## Review before you release
 
 `sweet status` shows the current version and planned bump for every package.
+`sweet doctor` reports consistency problems and duplicate package names, with a
+nonzero exit code when a check fails.
 `sweet bump` updates local files and consumes the notes for the selected releases.
 You review and commit the result. Tagging and publishing are separate steps.
 

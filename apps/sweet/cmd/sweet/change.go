@@ -20,15 +20,30 @@ func newChangeCommand() *cobra.Command {
 func newChangeCommandWithPrompt(prompt func(*cobra.Command) (string, error)) *cobra.Command {
 	var stdin bool
 	var changeType string
+	var name string
 	cmd := &cobra.Command{
 		Use:   "change [package]",
 		Short: "Create a release note in a package directory",
 		Long:  "Create a release note in a package directory (the current directory by default).\nEnter a one-line description, leave it empty to open $EDITOR, or use --stdin to read Markdown.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("package") && len(args) > 0 {
+				return fmt.Errorf("use either --package or a package directory")
+			}
 			dir := "."
 			if len(args) == 1 {
 				dir = args[0]
+			}
+			if cmd.Flags().Changed("package") {
+				root, err := core.RepositoryRoot()
+				if err != nil {
+					return err
+				}
+				pkg, err := core.ResolvePackageName(root, name)
+				if err != nil {
+					return err
+				}
+				dir = filepath.Join(root, pkg.Path)
 			}
 			dir, err := filepath.Abs(dir)
 			if err != nil {
@@ -108,6 +123,7 @@ func newChangeCommandWithPrompt(prompt func(*cobra.Command) (string, error)) *co
 	}
 	cmd.Flags().BoolVar(&stdin, "stdin", false, "Read the Markdown body from standard input instead of prompting")
 	cmd.Flags().StringVar(&changeType, "type", "", "Change type (opens a type picker when omitted)")
+	cmd.Flags().StringVar(&name, "package", "", "Select a package by name")
 	return cmd
 }
 

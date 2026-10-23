@@ -1,5 +1,6 @@
 # Sweet package configuration
-name: Sweet Release
+name: sweet
+display-name: Sweet Release
 version: 0.1.0
 version-files:
   - path: version.go

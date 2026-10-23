@@ -33,10 +33,11 @@ type releasePreparation struct {
 
 // PlannedRelease is the new release content, without previous changelog history.
 type PlannedRelease struct {
-	Path      string `json:"path"`
-	Name      string `json:"name"`
-	Version   string `json:"version"`
-	Changelog string `json:"changelog"`
+	Path        string `json:"path"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+	Version     string `json:"version"`
+	Changelog   string `json:"changelog"`
 }
 
 func prepareReleases(root string, paths []string, independent bool, config RepositoryConfig) (*releasePreparation, error) {
@@ -164,7 +165,7 @@ func prepareReleases(root string, paths []string, independent bool, config Repos
 		}
 		entry := releaseEntry(status, types)
 		changelog.after = []byte(insertRelease(introduction, entry))
-		plan.content = append(plan.content, PlannedRelease{status.Path, status.DisplayName(), status.NextVersion, entry})
+		plan.content = append(plan.content, PlannedRelease{Path: status.Path, Name: status.Name, DisplayName: status.DisplayName(), Version: status.NextVersion, Changelog: entry})
 		edits = append(edits, manifest, changelog)
 		for _, change := range status.Changes {
 			edit, err := readReleaseEdit(filepath.Join(root, change.Path), false)

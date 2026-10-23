@@ -41,7 +41,7 @@ func newStatusCommand() *cobra.Command {
 				if len(pkg.Problems) > 0 {
 					bump, next = "invalid", ""
 				}
-				fmt.Fprintf(out, "%s\t%s\t%s\t%s\n", pkg.Path, pkg.Version, bump, next)
+				fmt.Fprintf(out, "%s\t%s\t%s\t%s\n", pkg.Name, pkg.Version, bump, next)
 			}
 			if err := out.Flush(); err != nil {
 				return err
