@@ -33,7 +33,8 @@ The equivalent Mise tasks are `mise run sweet -- status`, `mise run check`, and
 `mise run build`. Use `mise run deploy` to install `sweet` into `~/.local/bin`.
 Run all Go checks from the repository root.
 
-GitHub Actions runs CI on branch pushes and pull requests. It checks Go formatting,
+GitHub Actions runs CI on pushes to `main` and pull requests. Other branch pushes
+do not trigger CI, so each pull request update runs the checks once. It checks Go formatting,
 runs all tests with race detection, runs `go vet`, and builds the CLI
 on Linux. You can also start the CI workflow manually from the Actions tab.
 To run the additional checks locally, use `gofmt -l apps/sweet` (no output means
