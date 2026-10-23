@@ -77,6 +77,7 @@ jobs:
           go build -o "$RUNNER_TEMP/sweet" ./apps/sweet/cmd/sweet
           changed=$(python3 .github/scripts/release-pr.py prepare "$RUNNER_TEMP/sweet" "$RELEASE_JOB" "$RUNNER_TEMP/release")
           printf 'changed=%s\n' "$changed" >> "$GITHUB_OUTPUT"
+          printf 'title=%s\n' "$(cat "$RUNNER_TEMP/release/title.txt")" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@v6
         if: steps.prepare.outputs.changed == 'true' && contains(matrix.packages, 'apps/docs')
         with:
@@ -113,7 +114,7 @@ jobs:
           branch: ${{ matrix.branch }}
           delete-branch: true
           commit-message: 'chore: prepare releases'
-          title: ${{ matrix.title }}
+          title: ${{ steps.prepare.outputs.title }}
           body-path: ${{ runner.temp }}/release/body.md
       - name: Record desired release PR
         uses: actions/upload-artifact@v4

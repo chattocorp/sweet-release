@@ -20,6 +20,8 @@ With `per-package`, each eligible package has its own PR. Its branch uses
 `sweet/release-package-<path-slug>-<path-hash>` so root packages, nested paths,
 and paths with spaces have stable, distinct branch names. Branch names do not
 include versions; new notes and versions update the existing open PR.
+Individual package PR titles use `chore: release <name-or-path> <version>`, with
+the version read after the bump. Combined PR titles remain `chore: prepare releases`.
 Each job starts with a clean checkout and runs `sweet bump` for its selected
 packages. It checks Git status, including untracked files, and creates a PR only
 if the bump changed files. All inventory packages are included, so invalid
