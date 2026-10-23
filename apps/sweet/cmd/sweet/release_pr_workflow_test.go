@@ -159,7 +159,7 @@ func TestReleasePRPreparation(t *testing.T) {
 				if tc.strategy != "combined" && job.Packages[0] != tc.selected {
 					continue
 				}
-				jobData, _ := json.Marshal(map[string]any{"branch": job.Branch, "packages": job.Packages})
+				jobData, _ := json.Marshal(map[string]any{"branch": job.Branch, "title": job.Title, "packages": job.Packages})
 				destination := filepath.Join(temporary, "result")
 				out, err := invoke("", "python3", script, "prepare", sweet, string(jobData), destination)
 				if tc.invalid {
@@ -183,6 +183,18 @@ func TestReleasePRPreparation(t *testing.T) {
 					t.Fatalf("cleanup result: %s, %v", data, err)
 				}
 				if tc.changed {
+					wantTitle := "chore: prepare releases"
+					if tc.strategy == "per-package" {
+						name := tc.selected
+						if name == "." {
+							name = "Sweet Release"
+						}
+						wantTitle = "chore: release " + name + " 0.1.0"
+					}
+					title, err := os.ReadFile(filepath.Join(destination, "title.txt"))
+					if err != nil || string(title) != wantTitle {
+						t.Fatalf("release title: %s, want %s, %v", title, wantTitle, err)
+					}
 					body, err := os.ReadFile(filepath.Join(destination, "body.md"))
 					if err != nil || !strings.Contains(string(body), "New functionality.") || !strings.Contains(string(body), "0.1.0") {
 						t.Fatalf("release body: %s, %v", body, err)

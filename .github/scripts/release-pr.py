@@ -47,6 +47,7 @@ def prepare(sweet, job, destination):
     before = {p["path"]: p for p in json.loads(output(sweet, "status", "--json"))}
     subprocess.run([sweet, "bump", "--", *job["packages"]], check=True, stdout=sys.stderr)
     changed = bool(output("git", "status", "--porcelain", "--untracked-files=all"))
+    title = job["title"]
     body = "This PR prepares the following releases:\n"
     if changed:
         after = {p["path"]: p for p in json.loads(output(sweet, "status", "--json"))}
@@ -56,10 +57,13 @@ def prepare(sweet, job, destination):
                 continue
             name = package.get("name") or path
             version = package["version"]
+            if job["branch"] != "sweet/release":
+                title = f"chore: release {name} {version}"
             notes = output(sweet, "changelog", "--version", version, "--", path)
             body += f"\n## {name} {version}\n\n{notes}"
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "body.md").write_text(body)
+    (destination / "title.txt").write_text(title)
     # Every successful job writes a result, including a no-op. Cleanup only runs
     # after every job succeeds and consumes these actual outcomes.
     (destination / "desired.json").write_text(json.dumps([{"branch": job["branch"]}] if changed else []))
