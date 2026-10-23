@@ -232,6 +232,7 @@ func releaseEntry(status PackageStatus, types []ChangeType) string {
 		}
 	}
 	for _, section := range sections {
+		var breakingBodies []string
 		var bodies []string
 		for _, change := range status.Changes {
 			if byType[change.Type] != section {
@@ -249,9 +250,14 @@ func releaseEntry(status PackageStatus, types []ChangeType) string {
 						lines[i] = "  " + lines[i]
 					}
 				}
-				bodies = append(bodies, strings.Join(lines, "\n"))
+				if change.Breaking {
+					breakingBodies = append(breakingBodies, strings.Join(lines, "\n"))
+				} else {
+					bodies = append(bodies, strings.Join(lines, "\n"))
+				}
 			}
 		}
+		bodies = append(breakingBodies, bodies...)
 		if len(bodies) > 0 {
 			fmt.Fprintf(&out, "\n### %s\n\n%s\n", section, strings.Join(bodies, "\n"))
 		}

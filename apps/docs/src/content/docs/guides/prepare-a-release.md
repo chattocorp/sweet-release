@@ -104,7 +104,9 @@ updated changelogs with `sweet changelog <package> --version <version>`.
 For a working automation example, see this repository's
 [Release PR workflow](https://github.com/chattocorp/sweet-release/blob/main/.github/workflows/release-pr.yml).
 It uses `RELEASE_PR_STRATEGY: per-package` in the workflow; set it to `combined`
-for one PR. Use combined mode for packages that share a version target, since
+for one PR. Each package's PR description heading contains its display name (or
+path) and new version, such as `Sweet Release 0.2.0`, followed by its release notes.
+Use combined mode for packages that share a version target, since
 separate PRs do not coordinate shared writes. The workflow verifies changed
 checkouts and cleans up obsolete PRs only after all jobs succeed. Make corrections
 through `main`, since the next run can overwrite edits on generated branches.

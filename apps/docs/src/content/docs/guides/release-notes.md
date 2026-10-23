@@ -48,7 +48,9 @@ A breaking change requires at least a minor bump for `0.x` packages and a major
 bump for other versions. A type configured with a major bump still requires a
 major bump for a `0.x` package.
 
-In the generated changelog, breaking notes start with an inline warning:
+In the generated changelog, breaking notes appear first in each section and start
+with an inline warning. The existing order is preserved within the breaking and
+non-breaking groups:
 
 ```markdown
 - ⚠️ **BREAKING CHANGE:** Replace the old API with the new API.

@@ -127,6 +127,9 @@ func TestReleasePRPreparation(t *testing.T) {
 			git("config", "user.email", "test@example.com")
 			for _, path := range []string{".", "nested/client with spaces", "-flag", "idle"} {
 				write(filepath.Join(root, path, ".sweet.yml"), "version: 0.0.0\n")
+				if path == "." {
+					write(filepath.Join(root, path, ".sweet.yml"), "version: 0.0.0\nname: Sweet Release\n")
+				}
 				if path != "idle" {
 					kind := "feature"
 					if tc.invalid && path == "." {
@@ -183,6 +186,21 @@ func TestReleasePRPreparation(t *testing.T) {
 					body, err := os.ReadFile(filepath.Join(destination, "body.md"))
 					if err != nil || !strings.Contains(string(body), "New functionality.") || !strings.Contains(string(body), "0.1.0") {
 						t.Fatalf("release body: %s, %v", body, err)
+					}
+					for _, path := range job.Packages {
+						if path == "idle" {
+							continue
+						}
+						name := path
+						if path == "." {
+							name = "Sweet Release"
+						}
+						if !strings.Contains(string(body), "\n## "+name+" 0.1.0\n") {
+							t.Fatalf("missing package and version heading: %s", body)
+						}
+					}
+					if strings.Contains(string(body), "Target version:") {
+						t.Fatalf("unexpected target version line: %s", body)
 					}
 					git("add", ".")
 					git("commit", "-m", "Prepared release")

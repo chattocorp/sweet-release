@@ -39,8 +39,9 @@ The PR contains updated manifests, changelogs, configured version files, and
 deletions of consumed notes. Notes with no version effect alone do not create a PR.
 Do not add a `branch-suffix`, which would create separate PR branches on each run.
 After merging or closing a PR, a later release can create a new PR.
-The PR description lists each package's target version and new changelog content,
-without previous release history. After bumping, the workflow reads the new
+The PR description uses a heading with each package's display name (or path) and
+new version, followed by its new changelog content without previous release
+history. After bumping, the workflow reads the new
 versions with `sweet status --json` and extracts their sections with
 `sweet changelog`. Descriptions and cleanup results stay outside the checkout
 so they cannot turn a no-op bump into a PR.
