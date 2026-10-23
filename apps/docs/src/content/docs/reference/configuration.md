@@ -30,11 +30,10 @@ letter and contain only lowercase letters, digits, and hyphens.
 | Setting | Values | When omitted |
 | --- | --- | --- |
 | `bump` | `major`, `minor`, `patch`, `none` | `none` |
-| `section` | Changelog heading | Exclude non-breaking notes from the changelog |
+| `section` | Changelog heading | Exclude from the changelog |
 
 Types with the same section share a heading. An empty or null section also
-excludes non-breaking notes from the changelog without changing the type's bump.
-Breaking notes always appear in `Breaking Changes` at the top of each release.
+excludes the type from the changelog without changing its bump.
 
 Missing repository configuration or an omitted `types` field uses the built-in
 types above. Invalid type definitions are errors. Pull request policy belongs to

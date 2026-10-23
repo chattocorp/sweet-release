@@ -158,11 +158,11 @@ func TestSourceLinkWrappedParagraph(t *testing.T) {
 			Body: "\n  Show help when running `sweet` without a command.\nUse `sweet change` to write release notes. \t\n\n",
 		}}}
 		got := releaseEntryWithLinks(status, []ChangeType{{Name: "feature", Section: "Features"}}, map[string]string{"note": link})
-		section := "Features"
+		prefix := "- "
 		if breaking {
-			section = "Breaking Changes"
+			prefix += "⚠️ **BREAKING CHANGE:** "
 		}
-		want := "## 1.1.0\n\n### " + section + "\n\n- Show help when running `sweet` without a command.\n  Use `sweet change` to write release notes. (" + link + ")\n"
+		want := "## 1.1.0\n\n### Features\n\n" + prefix + "Show help when running `sweet` without a command.\n  Use `sweet change` to write release notes. (" + link + ")\n"
 		if got != want {
 			t.Fatalf("breaking=%v: got %q, want %q", breaking, got, want)
 		}
@@ -179,11 +179,11 @@ func TestSourceLinkWrappedInlineCode(t *testing.T) {
 		for _, breaking := range []bool{false, true} {
 			status := PackageStatus{NextVersion: "1.1.0", Changes: []Change{{Path: "note", Type: "feature", Body: body, Breaking: breaking}}}
 			got := releaseEntryWithLinks(status, []ChangeType{{Name: "feature", Section: "Features"}}, map[string]string{"note": "source"})
-			section := "Features"
+			prefix := "- "
 			if breaking {
-				section = "Breaking Changes"
+				prefix += "⚠️ **BREAKING CHANGE:** "
 			}
-			want := "## 1.1.0\n\n### " + section + "\n\n- " + strings.ReplaceAll(body, "\n", "\n  ") + " (source)\n"
+			want := "## 1.1.0\n\n### Features\n\n" + prefix + strings.ReplaceAll(body, "\n", "\n  ") + " (source)\n"
 			if got != want {
 				t.Fatalf("body %q, breaking=%v: got %q, want %q", body, breaking, got, want)
 			}

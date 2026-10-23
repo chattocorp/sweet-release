@@ -230,9 +230,9 @@ func releaseEntry(status PackageStatus, types []ChangeType) string {
 func releaseEntryWithLinks(status PackageStatus, types []ChangeType, links map[string]string) string {
 	var out strings.Builder
 	fmt.Fprintf(&out, "## %s\n", status.NextVersion)
-	sections := []string{"Breaking Changes"}
+	var sections []string
 	byType := map[string]string{}
-	seen := map[string]bool{"Breaking Changes": true}
+	seen := map[string]bool{}
 	for _, typ := range types {
 		byType[typ.Name] = typ.Section
 		if typ.Section != "" && !seen[typ.Section] {
@@ -241,16 +241,16 @@ func releaseEntryWithLinks(status PackageStatus, types []ChangeType, links map[s
 		}
 	}
 	for _, section := range sections {
+		var breakingBodies []string
 		var bodies []string
 		for _, change := range status.Changes {
-			changeSection := byType[change.Type]
-			if change.Breaking {
-				changeSection = "Breaking Changes"
-			}
-			if changeSection != section {
+			if byType[change.Type] != section {
 				continue
 			}
 			body := strings.TrimSpace(change.Body)
+			if change.Breaking {
+				body = "⚠️ **BREAKING CHANGE:** " + body
+			}
 			if body != "" {
 				lines := strings.Split(body, "\n")
 				if link := links[change.Path]; link != "" {
@@ -267,9 +267,14 @@ func releaseEntryWithLinks(status PackageStatus, types []ChangeType, links map[s
 						lines[i] = "  " + lines[i]
 					}
 				}
-				bodies = append(bodies, strings.Join(lines, "\n"))
+				if change.Breaking {
+					breakingBodies = append(breakingBodies, strings.Join(lines, "\n"))
+				} else {
+					bodies = append(bodies, strings.Join(lines, "\n"))
+				}
 			}
 		}
+		bodies = append(breakingBodies, bodies...)
 		if len(bodies) > 0 {
 			fmt.Fprintf(&out, "\n### %s\n\n%s\n", section, strings.Join(bodies, "\n"))
 		}
