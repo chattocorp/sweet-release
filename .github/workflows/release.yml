@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing CLI tag to publish (apps/sweet/v..., pkg/sweet/v..., or pkg/cli/v...)
+        description: Existing CLI tag to publish (sweet@... or a historical path/v... tag)
         required: true
         type: string
 
@@ -48,7 +48,7 @@ jobs:
           TAG: ${{ inputs.tag }}
           EXPECTED_COMMIT: ${{ inputs.commit }}
         run: |
-          [[ "$TAG" == apps/sweet/v* || "$TAG" == pkg/sweet/v* || "$TAG" == pkg/cli/v* ]]
+          [[ "$TAG" == sweet@* || "$TAG" == apps/sweet/v* || "$TAG" == pkg/sweet/v* || "$TAG" == pkg/cli/v* ]]
           commit=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
           [[ -z "$EXPECTED_COMMIT" || "$commit" == "$EXPECTED_COMMIT" ]]
           git checkout --detach "$commit"

@@ -73,8 +73,31 @@ version-files:
 
 `version` must be a complete semantic version. The optional `name` must be a
 non-empty single-line string without surrounding whitespace. It supplies a
-display name for changelogs and releases. Paths still identify packages and
-determine tag names. Without a name, the repository-relative path is used.
+display name for changelogs and releases. Paths still identify packages.
+Without a name, the repository-relative path is used for display.
+
+### Release tags
+
+Tags default to `<directory-name>@<version>`: `apps/api` at version `1.2.3`
+produces `api@1.2.3`. A root package defaults to `v1.2.3`.
+The optional `tag-prefix` replaces all text before the version:
+
+```yaml
+version: 1.2.3
+tag-prefix: service-api@
+```
+
+This produces `service-api@1.2.3`. An empty string produces just `1.2.3`.
+Prefixes must produce valid Git tag names. The display `name` does not affect tags.
+To keep the previous path-based format, set `tag-prefix: apps/api/v`.
+Existing tags are never renamed or removed; changing the prefix can create a new
+tag for an already released version when you run `sweet git tag`.
+
+Each package must have a unique tag prefix, even if its current version differs
+from other packages. Run `sweet doctor` to report configuration problems and
+duplicate prefixes as warnings. Other repository commands fail on duplicate
+prefixes before making changes. Set a unique `tag-prefix` in each conflicting
+package's `.sweet.yml` to resolve the warning.
 
 ## Version files
 

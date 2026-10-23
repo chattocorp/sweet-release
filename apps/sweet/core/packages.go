@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -17,9 +18,67 @@ import (
 
 // Package identifies a release package by its repository-relative path.
 type Package struct {
-	Path    string `json:"path"`
-	Version string `json:"version"`
-	Name    string `json:"name,omitempty"`
+	Path      string  `json:"path"`
+	Version   string  `json:"version"`
+	Name      string  `json:"name,omitempty"`
+	TagPrefix *string `json:"tagPrefix,omitempty"`
+}
+
+// ReleasePrefix is the literal text before the version in a release tag.
+func (p Package) ReleasePrefix() string {
+	if p.TagPrefix != nil {
+		return *p.TagPrefix
+	}
+	if p.Path == "." {
+		return "v"
+	}
+	return path.Base(p.Path) + "@"
+}
+
+func (p Package) ReleaseTagName() string { return p.ReleasePrefix() + p.Version }
+
+// TagPrefixProblems reports ambiguous release tag ownership, regardless of version.
+func TagPrefixProblems(packages []Package) []Problem {
+	var problems []Problem
+	owners := map[string]string{}
+	tags := map[string]Package{}
+	for _, pkg := range packages {
+		prefix := pkg.ReleasePrefix()
+		if owner, ok := owners[prefix]; ok {
+			problems = append(problems, Problem{Path: path.Join(pkg.Path, ".sweet.yml"), Message: fmt.Sprintf("tag prefix %q is shared by packages %q and %q; set a unique tag-prefix", prefix, owner, pkg.Path)})
+		} else {
+			owners[prefix] = pkg.Path
+		}
+		name := pkg.ReleaseTagName()
+		if owner, ok := tags[name]; ok && owner.ReleasePrefix() != prefix {
+			problems = append(problems, Problem{Path: path.Join(pkg.Path, ".sweet.yml"), Message: fmt.Sprintf("tag %q is shared by packages %q and %q; set a unique tag-prefix", name, owner.Path, pkg.Path)})
+		}
+		tags[name] = pkg
+	}
+	return problems
+}
+
+// DiagnosePackages returns manifest and tag-prefix problems without failing on them.
+func DiagnosePackages(root string) ([]Problem, error) {
+	packages, problems, err := discoverPackages(root)
+	return append(problems, TagPrefixProblems(packages)...), err
+}
+
+// CheckTagPrefixes validates tag ownership in working files.
+func CheckTagPrefixes(root string) error {
+	packages, _, err := discoverPackages(root)
+	if err != nil {
+		return err
+	}
+	return tagPrefixError(packages)
+}
+
+func tagPrefixError(packages []Package) error {
+	var errs []error
+	for _, problem := range TagPrefixProblems(packages) {
+		errs = append(errs, problem)
+	}
+	return errors.Join(errs...)
 }
 
 // DisplayName returns presentation metadata, never a package identifier.
@@ -46,6 +105,7 @@ func DiscoverPackages(root string) ([]Package, error) {
 		return nil, err
 	}
 	var errs []error
+	problems = append(problems, TagPrefixProblems(packages)...)
 	for _, problem := range problems {
 		errs = append(errs, problem)
 	}
@@ -89,15 +149,17 @@ func packagesFromFiles(root string, paths []string) ([]Package, []Problem, error
 		} // A tracked manifest may have been deleted locally.
 		var version string
 		var name string
+		var prefix *string
 		if err == nil {
 			var manifest packageManifest
 			manifest, err = parsePackageManifest(content)
 			version, name = manifest.Version, manifest.Name
+			prefix = manifest.TagPrefix
 		}
 		if err != nil {
 			problems = append(problems, Problem{Path: path, Message: err.Error()})
 		}
-		packages = append(packages, Package{Path: filepath.ToSlash(filepath.Dir(path)), Version: version, Name: name})
+		packages = append(packages, Package{Path: filepath.ToSlash(filepath.Dir(path)), Version: version, Name: name, TagPrefix: prefix})
 	}
 	sort.Slice(packages, func(i, j int) bool { return packages[i].Path < packages[j].Path })
 	return packages, problems, nil
@@ -109,6 +171,7 @@ func readPackageVersion(content []byte) (string, error) {
 }
 
 type packageManifest struct {
+	TagPrefix    *string
 	Version      string
 	Name         string
 	VersionFiles []VersionFile
@@ -117,9 +180,10 @@ type packageManifest struct {
 func parsePackageManifest(content []byte) (packageManifest, error) {
 	var result packageManifest
 	var manifest struct {
-		Version yaml.Node `yaml:"version"`
-		Name    yaml.Node `yaml:"name"`
-		Files   yaml.Node `yaml:"version-files"`
+		Version   yaml.Node `yaml:"version"`
+		Name      yaml.Node `yaml:"name"`
+		Files     yaml.Node `yaml:"version-files"`
+		TagPrefix yaml.Node `yaml:"tag-prefix"`
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	if err := decoder.Decode(&manifest); err != nil {
@@ -144,7 +208,17 @@ func parsePackageManifest(content []byte) (packageManifest, error) {
 	if err != nil {
 		return result, err
 	}
-	return packageManifest{Version: version.Value, Name: name, VersionFiles: files}, nil
+	var prefix *string
+	if n := manifest.TagPrefix; n.Kind != 0 {
+		if n.Kind != yaml.ScalarNode || n.Tag != "!!str" {
+			return result, fmt.Errorf("tag-prefix must be a string")
+		}
+		if err := exec.Command("git", "check-ref-format", "refs/tags/"+n.Value+version.Value).Run(); err != nil {
+			return result, fmt.Errorf("tag-prefix %q produces an invalid Git tag", n.Value)
+		}
+		prefix = &n.Value
+	}
+	return packageManifest{Version: version.Value, Name: name, VersionFiles: files, TagPrefix: prefix}, nil
 }
 
 func readPackageName(content []byte) (string, error) {

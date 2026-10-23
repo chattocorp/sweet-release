@@ -5,12 +5,14 @@ tag=$1
 config=$2
 metadata=${SWEET_METADATA:?Set SWEET_METADATA to the current sweet binary}
 case "$tag" in
+  sweet@*) package=apps/sweet ;;
   apps/sweet/v*) package=apps/sweet ;;
   pkg/sweet/v*) package=pkg/sweet ;;
   pkg/cli/v*) package=pkg/cli ;;
   *) echo "Unsupported release tag: $tag" >&2; exit 1 ;;
 esac
 version=${tag#"$package/v"}
+if [[ "$tag" == sweet@* ]]; then version=${tag#sweet@}; fi
 [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse --verify "refs/tags/$tag^{commit}")" ]]
 name=$("$metadata" status --json | jq -er --arg package "$package" '.[] | select(.path == $package) | if (.name // "") == "" then .path else .name end')

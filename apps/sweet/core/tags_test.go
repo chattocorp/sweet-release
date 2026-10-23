@@ -57,7 +57,7 @@ func TestPlanTagsVersionsAndCommits(t *testing.T) {
 	if err != nil || len(tags) != 3 {
 		t.Fatalf("tags: %+v, %v", tags, err)
 	}
-	for i, want := range []struct{ name, commit string }{{"v0.1.0", first}, {"pkg/core/v1.0.0", first}, {"pkg/core/v1.1.0-beta.1", second}} {
+	for i, want := range []struct{ name, commit string }{{"v0.1.0", first}, {"core@1.0.0", first}, {"core@1.1.0-beta.1", second}} {
 		if tags[i].Name != want.name || tags[i].Commit != want.commit || tags[i].Exists {
 			t.Fatalf("tag %d: %+v", i, tags[i])
 		}
@@ -66,14 +66,52 @@ func TestPlanTagsVersionsAndCommits(t *testing.T) {
 		t.Fatalf("planning created tags: %s", out)
 	}
 	git("tag", "-a", "v0.1.0", "-m", "release", first)
-	git("tag", "pkg/core/v1.0.0", first) // Lightweight existing tags also work.
+	git("tag", "core@1.0.0", first) // Lightweight existing tags also work.
 	tags, err = PlanTags(root, base, head)
 	if err != nil || !tags[0].Exists || !tags[1].Exists || tags[2].Exists {
 		t.Fatalf("rerun: %+v, %v", tags, err)
 	}
-	git("tag", "pkg/core/v1.1.0-beta.1", base)
+	git("tag", "core@1.1.0-beta.1", base)
 	if _, err := PlanTags(root, base, head); err == nil || !strings.Contains(err.Error(), "refusing to move") {
 		t.Fatalf("accepted conflicting tag: %v", err)
+	}
+}
+
+func TestTagPrefixesAndCollisions(t *testing.T) {
+	root, git, write, commit := tagFixture(t)
+	base := commit()
+	write("apps/api/.sweet.yml", "version: 1.0.0\n")
+	write("services/api/.sweet.yml", "version: 2.0.0\n")
+	head := commit()
+	if _, err := DiscoverPackages(root); err == nil {
+		t.Fatal("discovery accepted duplicate prefixes")
+	}
+	if problems, err := DiagnosePackages(root); err != nil || len(problems) != 1 {
+		t.Fatalf("diagnosis: %v, %v", problems, err)
+	}
+	if _, err := PlanTags(root, base, head); err == nil {
+		t.Fatal("range accepted duplicate prefixes")
+	}
+	if _, err := PlanCurrentTags(root); err == nil {
+		t.Fatal("current accepted duplicate prefixes")
+	}
+	write("services/api/.sweet.yml", "version: 2.0.0\ntag-prefix: services/api/v\n")
+	fixed := commit()
+	if tags, err := PlanTags(root, head, fixed); err != nil || len(tags) != 0 {
+		t.Fatalf("prefix-only repair: %v, %v", tags, err)
+	}
+	tags, err := PlanCurrentTags(root)
+	if err != nil || len(tags) != 2 {
+		t.Fatalf("tags: %v, %v", tags, err)
+	}
+	if tags[0].Name != "api@1.0.0" || tags[1].Name != "services/api/v2.0.0" || tags[1].Commit != head {
+		t.Fatalf("tags: %v", tags)
+	}
+	if err := CreateReleaseTags(root, append(tags, tags[0])); err == nil {
+		t.Fatal("accepted duplicate plan entries")
+	}
+	if got := git("tag", "--list"); got != "" {
+		t.Fatalf("partial write: %s", got)
 	}
 }
 
@@ -89,7 +127,7 @@ func TestDisplayNameDoesNotChangeTags(t *testing.T) {
 	}
 	write("pkg/cli/.sweet.yml", "version: 0.2.0\nname: Sweet Release\n")
 	tags, err = PlanTags(root, renamed, commit())
-	if err != nil || len(tags) != 1 || tags[0].Name != "pkg/cli/v0.2.0" {
+	if err != nil || len(tags) != 1 || tags[0].Name != "cli@0.2.0" {
 		t.Fatalf("name affected tag: %v, %v", tags, err)
 	}
 }
@@ -107,7 +145,7 @@ func TestPlanTagsMergeUsesFirstParent(t *testing.T) {
 	git("merge", "--no-ff", "release", "-m", "Merge release")
 	head := git("rev-parse", "HEAD")
 	tags, err := PlanTags(root, base, head)
-	if err != nil || len(tags) != 1 || tags[0].Name != "pkg/api/v1.1.0" || tags[0].Commit != head {
+	if err != nil || len(tags) != 1 || tags[0].Name != "api@1.1.0" || tags[0].Commit != head {
 		t.Fatalf("merge tags: %+v, %v", tags, err)
 	}
 	if _, err := PlanTags(root, side, head); err == nil || !strings.Contains(err.Error(), "first-parent") {
@@ -123,7 +161,7 @@ func TestPlanTagsInitialAndEmpty(t *testing.T) {
 	write("pkg/api/.sweet.yml", "version: 2.0.0\n")
 	head := commit()
 	tags, err := PlanTags(root, strings.Repeat("0", 40), head)
-	if err != nil || len(tags) != 1 || tags[0].Name != "pkg/api/v2.0.0" || tags[0].Commit != head {
+	if err != nil || len(tags) != 1 || tags[0].Name != "api@2.0.0" || tags[0].Commit != head {
 		t.Fatalf("branch creation should use only its snapshot: %+v, %v", tags, err)
 	}
 	tags, err = PlanTags(root, head, head)
@@ -198,16 +236,16 @@ func TestCurrentTagsOnlyCurrentVersions(t *testing.T) {
 	commit() // Unrelated changes must not become the release target.
 	write("api/.sweet.yml", "version: 3.0.0\n")
 	tags, err := PlanCurrentTags(root)
-	if err != nil || len(tags) != 1 || tags[0].Name != "api/v2.0.0" || tags[0].Commit != release {
+	if err != nil || len(tags) != 1 || tags[0].Name != "api@2.0.0" || tags[0].Commit != release {
 		t.Fatalf("current plan: %+v, %v", tags, err)
 	}
 	if err := CreateReleaseTags(root, tags); err != nil {
 		t.Fatal(err)
 	}
-	if got := git("tag", "--list"); got != "api/v2.0.0" {
+	if got := git("tag", "--list"); got != "api@2.0.0" {
 		t.Fatalf("unexpected tags: %s", got)
 	}
-	if got := git("cat-file", "-t", "refs/tags/api/v2.0.0"); got != "tag" {
+	if got := git("cat-file", "-t", "refs/tags/api@2.0.0"); got != "tag" {
 		t.Fatalf("expected annotated tag, got %s", got)
 	}
 	tags, err = PlanCurrentTags(root)
@@ -233,7 +271,7 @@ func TestCurrentTagsFirstParentAndConflicts(t *testing.T) {
 	if err != nil || len(tags) != 1 || tags[0].Commit != release {
 		t.Fatalf("merge plan: %+v, %v", tags, err)
 	}
-	git("tag", "api/v1.0.0", side)
+	git("tag", "api@1.0.0", side)
 	if _, err := PlanCurrentTags(root); err == nil {
 		t.Fatal("accepted a conflicting tag")
 	}

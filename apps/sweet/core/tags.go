@@ -39,7 +39,7 @@ func PlanTags(root, base, head string) ([]ReleaseTag, error) {
 		return nil, err
 	}
 	commits := []string{head}
-	previous := map[string]string{}
+	previous := map[string]Package{}
 	zeroBase := (len(base) == 40 || len(base) == 64) && strings.Trim(base, "0") == ""
 	if !zeroBase {
 		base, err = tagCommit(root, base)
@@ -65,7 +65,9 @@ func PlanTags(root, base, head string) ([]ReleaseTag, error) {
 		for i, j := 0, len(commits)-1; i < j; i, j = i+1, j-1 {
 			commits[i], commits[j] = commits[j], commits[i]
 		}
-		previous, err = tagVersions(root, base)
+		// The base is only a version comparison, not a release plan. Allow a
+		// range to repair prefixes that were ambiguous in the base snapshot.
+		previous, err = tagVersionsForPackages(root, base, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -83,11 +85,11 @@ func PlanTags(root, base, head string) ([]ReleaseTag, error) {
 		}
 		sort.Strings(packages)
 		for _, pkg := range packages {
-			version := versions[pkg]
-			if version == previous[pkg] || version == "0.0.0" {
+			version := versions[pkg].Version
+			if version == previous[pkg].Version || version == "0.0.0" {
 				continue
 			}
-			name := path.Join(pkg, "v"+version)
+			name := versions[pkg].ReleaseTagName()
 			if _, err := tagGit(root, "check-ref-format", "refs/tags/"+name); err != nil {
 				return nil, fmt.Errorf("package %q produces an invalid tag %q: %w", pkg, name, err)
 			}
@@ -150,9 +152,10 @@ func PlanCurrentTags(root string) ([]ReleaseTag, error) {
 		return nil, err
 	}
 	pending := map[string]ReleaseTag{}
-	for pkg, version := range versions {
+	for pkg, manifest := range versions {
+		version := manifest.Version
 		if version != "0.0.0" {
-			pending[pkg] = ReleaseTag{Package: pkg, Version: version, Name: path.Join(pkg, "v"+version), Commit: head}
+			pending[pkg] = ReleaseTag{Package: pkg, Version: version, Name: manifest.ReleaseTagName(), Commit: head}
 		}
 	}
 	history, err := tagGit(root, "rev-list", "--first-parent", head)
@@ -173,7 +176,7 @@ func PlanCurrentTags(root string) ([]ReleaseTag, error) {
 			return nil, err
 		}
 		for pkg, tag := range pending {
-			if previous[pkg] != tag.Version {
+			if previous[pkg].Version != tag.Version {
 				tags = append(tags, tag)
 				delete(pending, pkg)
 			} else {
@@ -198,7 +201,12 @@ func PlanCurrentTags(root string) ([]ReleaseTag, error) {
 // tags. Existing tags are retained. Git failures can leave earlier tags created;
 // rerunning the command safely completes the remaining tags.
 func CreateReleaseTags(root string, tags []ReleaseTag) error {
+	seen := map[string]bool{}
 	for i := range tags {
+		if seen[tags[i].Name] {
+			return fmt.Errorf("duplicate release tag %q in plan", tags[i].Name)
+		}
+		seen[tags[i].Name] = true
 		if err := checkReleaseTag(root, &tags[i]); err != nil {
 			return err
 		}
@@ -213,17 +221,26 @@ func CreateReleaseTags(root string, tags []ReleaseTag) error {
 	return nil
 }
 
-func tagVersions(root, commit string) (map[string]string, error) {
-	return tagVersionsForPackages(root, commit, nil)
+func tagVersions(root, commit string) (map[string]Package, error) {
+	versions, err := tagVersionsForPackages(root, commit, nil)
+	if err != nil {
+		return nil, err
+	}
+	var packages []Package
+	for _, pkg := range versions {
+		packages = append(packages, pkg)
+	}
+	sort.Slice(packages, func(i, j int) bool { return packages[i].Path < packages[j].Path })
+	return versions, tagPrefixError(packages)
 }
 
 // A nil selection reads all packages; otherwise only selected manifests are read.
-func tagVersionsForPackages(root, commit string, packages map[string]bool) (map[string]string, error) {
+func tagVersionsForPackages(root, commit string, packages map[string]bool) (map[string]Package, error) {
 	tree, err := tagGit(root, "ls-tree", "-r", "-z", commit)
 	if err != nil {
 		return nil, err
 	}
-	versions := map[string]string{}
+	versions := map[string]Package{}
 	for _, record := range strings.Split(tree, "\x00") {
 		metadata, file, ok := strings.Cut(record, "\t")
 		if !ok || path.Base(file) != ".sweet.yml" {
@@ -240,14 +257,11 @@ func tagVersionsForPackages(root, commit string, packages map[string]bool) (map[
 		if err != nil {
 			return nil, err
 		}
-		version, err := readPackageVersion([]byte(content))
-		if err == nil {
-			_, err = nextVersion(version, "none")
-		}
+		manifest, err := parsePackageManifest([]byte(content))
 		if err != nil {
 			return nil, fmt.Errorf("%s at %s: %w", file, commit, err)
 		}
-		versions[path.Dir(file)] = version
+		versions[path.Dir(file)] = Package{Path: path.Dir(file), Version: manifest.Version, TagPrefix: manifest.TagPrefix}
 	}
 	return versions, nil
 }

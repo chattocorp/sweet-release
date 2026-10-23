@@ -2,6 +2,35 @@ package core
 
 import "testing"
 
+func TestDifferentPrefixesCannotProduceSameTag(t *testing.T) {
+	prefix := "api@1.0.0+"
+	packages := []Package{
+		{Path: "apps/api", Version: "1.0.0+2.0.0"},
+		{Path: "services/other", Version: "2.0.0", TagPrefix: &prefix},
+	}
+	if problems := TagPrefixProblems(packages); len(problems) != 1 {
+		t.Fatalf("missed identical tags: %v", problems)
+	}
+}
+
+func TestTagPrefixManifest(t *testing.T) {
+	for _, raw := range []string{"null", "123", "[]", "'bad prefix@'", "'../bad@'", "'bad..name@'", "'bad@{'"} {
+		if _, err := parsePackageManifest([]byte("version: 1.0.0\ntag-prefix: " + raw)); err == nil {
+			t.Errorf("accepted prefix %s", raw)
+		}
+	}
+	for _, prefix := range []string{"", "custom@", "old/path/v", "@scope/pkg@"} {
+		manifest, err := parsePackageManifest([]byte("version: 1.0.0\ntag-prefix: '" + prefix + "'"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		pkg := Package{Path: "apps/api", Version: manifest.Version, TagPrefix: manifest.TagPrefix}
+		if got := pkg.ReleaseTagName(); got != prefix+"1.0.0" {
+			t.Fatal(got)
+		}
+	}
+}
+
 func TestPackageManifestCompatibility(t *testing.T) {
 	manifest, err := parsePackageManifest([]byte("# metadata remains allowed\nversion: &version '1.2.3-beta.1+build'\nname: &name Sweet Release\ncustom: {value: *version}\nversion-files:\n  - {path: VERSION, format: text}\n"))
 	if err != nil || manifest.Version != "1.2.3-beta.1+build" || manifest.Name != "Sweet Release" || len(manifest.VersionFiles) != 1 {

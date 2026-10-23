@@ -6,7 +6,7 @@ import re
 import subprocess
 
 
-PREFIXES = ("pkg/cli/v", "pkg/sweet/v", "apps/sweet/v")
+PREFIXES = ("pkg/cli/v", "pkg/sweet/v", "apps/sweet/v", "sweet@")
 STABLE_VERSION = re.compile(
     r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
     r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
