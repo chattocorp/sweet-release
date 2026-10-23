@@ -72,9 +72,9 @@ to inspect the range without creating tags.
 ## Read released changes
 
 ```sh
-sweet changelog show apps/sweet
-sweet changelog show apps/sweet --version 0.2.0
-sweet changelog show
+sweet changelog apps/sweet
+sweet changelog apps/sweet --version 0.2.0
+sweet changelog
 ```
 
 Package paths are relative to the current directory. With no argument, Sweet uses
@@ -96,7 +96,7 @@ For a combined release, run `sweet bump --all` in one clean checkout instead.
 
 Your automation owns PR branches, titles, descriptions, and cleanup. Sweet has
 no `release-pr` command or PR strategy setting. Extract descriptions from the
-updated changelogs with `sweet changelog show <package> --version <version>`.
+updated changelogs with `sweet changelog <package> --version <version>`.
 
 For a working automation example, see this repository's
 [Release PR workflow](https://github.com/chattocorp/sweet-release/blob/main/.github/workflows/release-pr.yml).

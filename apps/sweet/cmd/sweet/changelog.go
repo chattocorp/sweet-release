@@ -10,18 +10,9 @@ import (
 )
 
 func newChangelogCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "changelog",
-		Short: "Read package changelogs",
-	}
-	cmd.AddCommand(newChangelogShowCommand())
-	return cmd
-}
-
-func newChangelogShowCommand() *cobra.Command {
 	var version string
 	cmd := &cobra.Command{
-		Use:   "show [package]",
+		Use:   "changelog [package]",
 		Short: "Show a package's released changes",
 		Long:  "Show the latest release from a package's changelog, or select a release with --version.\nPackage paths are relative to the current directory. With no argument, use the current\npackage or choose one interactively. Output contains the release body without its heading.",
 		Args:  cobra.MaximumNArgs(1),
@@ -35,7 +26,7 @@ func newChangelogShowCommand() *cobra.Command {
 					return err
 				}
 				if selected == "" {
-					return fmt.Errorf("the current directory is not a Sweet package; use sweet changelog show <package> (interactive selection requires a terminal)")
+					return fmt.Errorf("the current directory is not a Sweet package; use sweet changelog <package> (interactive selection requires a terminal)")
 				}
 				dir = selected
 			}

@@ -131,7 +131,7 @@ After merging or closing a PR, a later release can create a new PR.
 The PR description lists each package's target version and new changelog content,
 without previous release history. After bumping, the workflow reads the new
 versions with `sweet status --json` and extracts their sections with
-`sweet changelog show`. Descriptions and cleanup results stay outside the checkout
+`sweet changelog`. Descriptions and cleanup results stay outside the checkout
 so they cannot turn a no-op bump into a PR.
 
 Each run regenerates changes from `main`; it does not bump previous release
@@ -257,7 +257,7 @@ publishes the artifacts against the existing package tag. No extra
 tags are created. The job checks the Linux binary's version and archive checksums
 before upload. Release notes come from that version's CLI changelog section.
 
-`sweet changelog show [package] --version <version>` reads one release body from
+`sweet changelog [package] --version <version>` reads one release body from
 the package's `CHANGELOG.md`. The package is a directory path relative to the current
 directory and must contain a valid `.sweet.yml`. With no argument, the command uses
 the current package or offers the package picker when a terminal is available.

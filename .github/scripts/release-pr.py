@@ -56,7 +56,7 @@ def prepare(sweet, job, destination):
                 continue
             name = package.get("name") or path
             version = package["version"]
-            notes = output(sweet, "changelog", "show", "--version", version, "--", path)
+            notes = output(sweet, "changelog", "--version", version, "--", path)
             body += f"\n## {name}\n\nTarget version: **{version}**\n\n{notes}"
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "body.md").write_text(body)

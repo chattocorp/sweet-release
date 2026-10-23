@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestChangelogShowCommand(t *testing.T) {
+func TestChangelogCommand(t *testing.T) {
 	// Explicit packages need no repository configuration or historical CLI source.
 	root := t.TempDir()
 	dir := filepath.Join(root, "package with spaces")
@@ -36,25 +36,25 @@ func TestChangelogShowCommand(t *testing.T) {
 		{[]string{dir, dir}, "", false},
 	} {
 		var out, stderr bytes.Buffer
-		code := run(append([]string{"changelog", "show"}, tc.args...), &out, &stderr)
+		code := run(append([]string{"changelog"}, tc.args...), &out, &stderr)
 		if (code == 0) != tc.success || out.String() != tc.want {
 			t.Fatalf("%v: code %d, out %q, err %s", tc.args, code, out.String(), &stderr)
 		}
 	}
 	t.Chdir(dir)
 	var latest, latestErr bytes.Buffer
-	if code := run([]string{"changelog", "show"}, &latest, &latestErr); code != 0 || latest.String() != "\nNew\n\n" {
+	if code := run([]string{"changelog"}, &latest, &latestErr); code != 0 || latest.String() != "\nNew\n\n" {
 		t.Fatalf("current package: %d, %s, %s", code, &latest, &latestErr)
 	}
 	t.Chdir(root)
 	latest.Reset()
 	latestErr.Reset()
-	if code := run([]string{"changelog", "show", "package with spaces"}, &latest, &latestErr); code != 0 || latest.String() != "\nNew\n\n" {
+	if code := run([]string{"changelog", "package with spaces"}, &latest, &latestErr); code != 0 || latest.String() != "\nNew\n\n" {
 		t.Fatalf("relative package: %d, %s, %s", code, &latest, &latestErr)
 	}
 	latest.Reset()
 	latestErr.Reset()
-	if code := run([]string{"changelog", "show"}, &latest, &latestErr); code == 0 || !strings.Contains(latestErr.String(), "sweet changelog show <package>") {
+	if code := run([]string{"changelog"}, &latest, &latestErr); code == 0 || !strings.Contains(latestErr.String(), "sweet changelog <package>") {
 		t.Fatalf("missing current package: %d, %s", code, &latestErr)
 	}
 	var out, stderr bytes.Buffer
