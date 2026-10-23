@@ -40,6 +40,22 @@ on Linux. You can also start the CI workflow manually from the Actions tab.
 To run the additional checks locally, use `gofmt -l apps/sweet` (no output means
 formatting is correct) and `go test -race ./apps/sweet/...`.
 
+## Release PR authentication
+
+The Release PR workflow uses the `RELEASE_PR_TOKEN` Actions repository secret to
+create and update release branches and pull requests. Using a personal access
+token lets PR checks start without manual workflow approval.
+
+Create a fine-grained personal access token with `chattocorp` as the resource
+owner and access limited to `sweet-release`. Give it **Contents: Read and write**
+and **Pull requests: Read and write** permissions. Add it under repository
+**Settings > Secrets and variables > Actions** as `RELEASE_PR_TOKEN`. If the
+organization requires token approval, obtain that approval before use. Renew the
+secret before the token expires.
+
+The workflow reports an error if the secret is missing. Checkout, release PR
+cleanup, tagging, and publishing continue to use the built-in `GITHUB_TOKEN`.
+
 ## Documentation site development
 
 Install the tools with `mise install`. The site uses Node 24 and pnpm, with its own
