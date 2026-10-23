@@ -59,3 +59,32 @@ non-breaking groups:
 The type's `section` controls where the note appears in the changelog. A type
 without a section can still trigger a version bump. Notes with no version effect
 stay pending until another note causes the package to release.
+
+## Links to commits and pull requests
+
+`sweet bump` adds a source link to each committed note when it can identify the
+repository and the note's history. No network requests or GitHub API token are
+needed. For example:
+
+```markdown
+- Add package discovery. ([#123](https://github.com/owner/repo/pull/123))
+```
+
+Sweet uses the commit that added the note on the current branch's first-parent
+history. With a regular merge, this is the merge commit. It recognizes PR numbers
+in subjects that end with ` (#123)` or start with
+`Merge pull request #123 from ...`. Otherwise, it links to the commit using its
+short SHA. Later edits to a note do not change its source link. For multiline
+notes, the link appears in a separate paragraph within the changelog item.
+
+Commit the note with the change it describes. These links follow the note's
+history, not the history of the code described by the note. Commit subjects are
+conventions: Sweet does not verify that a referenced PR exists. A renamed note
+is treated as a new addition at its new path.
+
+Sweet infers the repository URL from a GitHub `origin` remote. You can set a
+[`repository` URL](/reference/configuration/#changelog-source-repository) to
+override it or use a GitHub-compatible host. Missing or unsupported remotes,
+uncommitted notes, and unavailable history produce notes without source links.
+Shallow repositories also omit source links. In GitHub Actions, set
+`fetch-depth: 0` on the checkout that runs `sweet bump` to provide full history.
