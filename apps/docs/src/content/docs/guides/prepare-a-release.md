@@ -69,6 +69,24 @@ each tag existed before creation. To select version changes within a commit rang
 pass both `--base <commit>` and `--head <commit>`. Combine these with `--dry-run`
 to inspect the range without creating tags.
 
+## Read released changes
+
+```sh
+sweet changelog apps/sweet
+sweet changelog apps/sweet --version 0.2.0
+sweet changelog
+```
+
+Package paths are relative to the current directory. With no argument, Sweet uses
+the current package or offers a package picker in a terminal. In scripts, supply
+a package path if the current directory is not a package.
+
+Sweet reads the package's `CHANGELOG.md`. By default it shows the first released
+version in changelog order, skipping `Unreleased` and fenced examples. This is
+independent of pending notes and the version in `.sweet.yml`. Use `--version` to
+select a specific entry. Output contains the release body without its version
+heading. A missing package, changelog, or release produces an error.
+
 ## Automate release pull requests
 
 Use `sweet status --json` to list packages. For each package, start from a clean
@@ -78,7 +96,7 @@ For a combined release, run `sweet bump --all` in one clean checkout instead.
 
 Your automation owns PR branches, titles, descriptions, and cleanup. Sweet has
 no `release-pr` command or PR strategy setting. Extract descriptions from the
-updated changelogs with `sweet release-notes <changelog> --version <version>`.
+updated changelogs with `sweet changelog <package> --version <version>`.
 
 For a working automation example, see this repository's
 [Release PR workflow](https://github.com/chattocorp/sweet-release/blob/main/.github/workflows/release-pr.yml).

@@ -42,7 +42,7 @@ After merging or closing a PR, a later release can create a new PR.
 The PR description lists each package's target version and new changelog content,
 without previous release history. After bumping, the workflow reads the new
 versions with `sweet status --json` and extracts their sections with
-`sweet release-notes`. Descriptions and cleanup results stay outside the checkout
+`sweet changelog`. Descriptions and cleanup results stay outside the checkout
 so they cannot turn a no-op bump into a PR.
 
 Each run regenerates changes from `main`; it does not bump previous release

@@ -36,7 +36,7 @@ goreleaser release --snapshot --clean --config "$temporary/goreleaser.yml"
 [[ "$(dist/sweet_linux_amd64_v1/sweet --version)" == "sweet $version" ]]
 (cd dist && sha256sum --check checksums.txt)
 notes="$temporary/notes.md"
-"$metadata" release-notes "$package/CHANGELOG.md" --version "$version" > "$notes"
+"$metadata" changelog "$package" --version "$version" > "$notes"
 
 prerelease=false
 [[ "${version%%+*}" != *-* ]] || prerelease=true

@@ -2,9 +2,45 @@ package core
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
+
+// PackageChangelog reads a release from a package's conventional changelog.
+// An empty version selects the first semantic-version heading in file order.
+func PackageChangelog(dir, version string) (string, error) {
+	manifest := filepath.Join(dir, ".sweet.yml")
+	data, err := os.ReadFile(manifest)
+	if err != nil {
+		return "", fmt.Errorf("read package manifest: %w", err)
+	}
+	if _, err := parsePackageManifest(data); err != nil {
+		return "", fmt.Errorf("%s: %w", manifest, err)
+	}
+	path := filepath.Join(dir, "CHANGELOG.md")
+	data, err = os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	if version == "" {
+		for _, heading := range changelogHeadings(string(data)) {
+			if _, err := nextVersion(heading.title, "none"); err == nil {
+				version = heading.title
+				break
+			}
+		}
+		if version == "" {
+			return "", fmt.Errorf("%s has no released versions", path)
+		}
+	}
+	notes, err := ChangelogRelease(string(data), version)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", path, err)
+	}
+	return notes, nil
+}
 
 // ChangelogRelease reads one version's body, excluding its heading and history.
 // Headings inside fenced code blocks are part of the body.
