@@ -41,6 +41,7 @@ func (p Package) ReleaseTagName() string { return p.ReleasePrefix() + p.Version 
 func TagPrefixProblems(packages []Package) []Problem {
 	var problems []Problem
 	owners := map[string]string{}
+	tags := map[string]Package{}
 	for _, pkg := range packages {
 		prefix := pkg.ReleasePrefix()
 		if owner, ok := owners[prefix]; ok {
@@ -48,6 +49,11 @@ func TagPrefixProblems(packages []Package) []Problem {
 		} else {
 			owners[prefix] = pkg.Path
 		}
+		name := pkg.ReleaseTagName()
+		if owner, ok := tags[name]; ok && owner.ReleasePrefix() != prefix {
+			problems = append(problems, Problem{Path: path.Join(pkg.Path, ".sweet.yml"), Message: fmt.Sprintf("tag %q is shared by packages %q and %q; set a unique tag-prefix", name, owner.Path, pkg.Path)})
+		}
+		tags[name] = pkg
 	}
 	return problems
 }

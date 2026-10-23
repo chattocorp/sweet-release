@@ -96,7 +96,10 @@ func TestTagPrefixesAndCollisions(t *testing.T) {
 		t.Fatal("current accepted duplicate prefixes")
 	}
 	write("services/api/.sweet.yml", "version: 2.0.0\ntag-prefix: services/api/v\n")
-	commit()
+	fixed := commit()
+	if tags, err := PlanTags(root, head, fixed); err != nil || len(tags) != 0 {
+		t.Fatalf("prefix-only repair: %v, %v", tags, err)
+	}
 	tags, err := PlanCurrentTags(root)
 	if err != nil || len(tags) != 2 {
 		t.Fatalf("tags: %v, %v", tags, err)

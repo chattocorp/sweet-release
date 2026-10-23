@@ -2,6 +2,17 @@ package core
 
 import "testing"
 
+func TestDifferentPrefixesCannotProduceSameTag(t *testing.T) {
+	prefix := "api@1.0.0+"
+	packages := []Package{
+		{Path: "apps/api", Version: "1.0.0+2.0.0"},
+		{Path: "services/other", Version: "2.0.0", TagPrefix: &prefix},
+	}
+	if problems := TagPrefixProblems(packages); len(problems) != 1 {
+		t.Fatalf("missed identical tags: %v", problems)
+	}
+}
+
 func TestTagPrefixManifest(t *testing.T) {
 	for _, raw := range []string{"null", "123", "[]", "'bad prefix@'", "'../bad@'", "'bad..name@'", "'bad@{'"} {
 		if _, err := parsePackageManifest([]byte("version: 1.0.0\ntag-prefix: " + raw)); err == nil {

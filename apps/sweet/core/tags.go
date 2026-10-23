@@ -65,7 +65,9 @@ func PlanTags(root, base, head string) ([]ReleaseTag, error) {
 		for i, j := 0, len(commits)-1; i < j; i, j = i+1, j-1 {
 			commits[i], commits[j] = commits[j], commits[i]
 		}
-		previous, err = tagVersions(root, base)
+		// The base is only a version comparison, not a release plan. Allow a
+		// range to repair prefixes that were ambiguous in the base snapshot.
+		previous, err = tagVersionsForPackages(root, base, nil)
 		if err != nil {
 			return nil, err
 		}
