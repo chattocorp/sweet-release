@@ -15,7 +15,7 @@ import (
 // Bump prepares releases for repository-relative package paths. An empty selection
 // selects all packages. It validates and prepares all edits before writing files.
 func Bump(root string, paths []string) ([]PackageStatus, error) {
-	plan, err := prepareReleases(root, paths, false, RepositoryConfig{})
+	plan, err := prepareReleases(root, paths)
 	if err != nil {
 		return nil, err
 	}
@@ -27,28 +27,17 @@ func Bump(root string, paths []string) ([]PackageStatus, error) {
 
 type releasePreparation struct {
 	statuses []PackageStatus
-	content  []PlannedRelease
 	edits    []releaseEdit
 }
 
-// PlannedRelease is the new release content, without previous changelog history.
-type PlannedRelease struct {
-	Path      string `json:"path"`
-	Name      string `json:"name"`
-	Version   string `json:"version"`
-	Changelog string `json:"changelog"`
-}
-
-func prepareReleases(root string, paths []string, independent bool, config RepositoryConfig) (*releasePreparation, error) {
+func prepareReleases(root string, paths []string) (*releasePreparation, error) {
 	root, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return nil, err
 	}
-	if config.ChangeTypes == nil {
-		config, err = LoadRepositoryConfig(root)
-		if err != nil {
-			return nil, err
-		}
+	config, err := LoadRepositoryConfig(root)
+	if err != nil {
+		return nil, err
 	}
 	statuses, err := repositoryStatus(root, config)
 	if err != nil {
@@ -88,11 +77,6 @@ func prepareReleases(root string, paths []string, independent bool, config Repos
 	versionFiles := map[string]*versionFilePlan{}
 	var releases []PackageStatus
 	plan := &releasePreparation{}
-	type ownedReplacement struct {
-		versionReplacement
-		owner string
-	}
-	owners := map[string][]ownedReplacement{}
 	for _, status := range selected {
 		if len(status.Changes) == 0 || status.Bump == "none" {
 			continue
@@ -112,14 +96,6 @@ func prepareReleases(root string, paths []string, independent bool, config Repos
 		sort.Strings(filePaths)
 		for _, path := range filePaths {
 			file := files[path]
-			for _, replacement := range file.replacements {
-				for _, previous := range owners[path] {
-					if independent && previous.owner != status.Path && replacement.start < previous.end && previous.start < replacement.end {
-						return nil, fmt.Errorf("%s and %s update the same version token in %s; use release-pr strategy: combined", previous.owner, status.Path, path)
-					}
-				}
-				owners[path] = append(owners[path], ownedReplacement{replacement, status.Path})
-			}
 			if existing := versionFiles[path]; existing != nil {
 				existing.replacements = append(existing.replacements, file.replacements...)
 			} else {
@@ -164,7 +140,6 @@ func prepareReleases(root string, paths []string, independent bool, config Repos
 		}
 		entry := releaseEntry(status, types)
 		changelog.after = []byte(insertRelease(introduction, entry))
-		plan.content = append(plan.content, PlannedRelease{status.Path, status.DisplayName(), status.NextVersion, entry})
 		edits = append(edits, manifest, changelog)
 		for _, change := range status.Changes {
 			edit, err := readReleaseEdit(filepath.Join(root, change.Path), false)

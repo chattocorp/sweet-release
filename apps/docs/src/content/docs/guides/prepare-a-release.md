@@ -69,19 +69,21 @@ each tag existed before creation. To select version changes within a commit rang
 pass both `--base <commit>` and `--head <commit>`. Combine these with `--dry-run`
 to inspect the range without creating tags.
 
-## Plan release pull requests
+## Automate release pull requests
 
-```sh
-sweet release-pr plan --details
-```
+Use `sweet status --json` to list packages. For each package, start from a clean
+checkout of the same base commit, run `sweet bump <package>`, and inspect the Git
+working tree, including new files. Create or update a PR only when files change.
+For a combined release, run `sweet bump --all` in one clean checkout instead.
 
-This read-only command returns JSON with stable branch names, titles, selected
-packages, and rendered release descriptions. It does not contact GitHub or create
-pull requests. Set `release-pr.strategy` to `per-package` for separate PRs or
-`combined` for a single release PR.
+Your automation owns PR branches, titles, descriptions, and cleanup. Sweet has
+no `release-pr` command or PR strategy setting. Extract descriptions from the
+updated changelogs with `sweet release-notes <changelog> --version <version>`.
 
 For a working automation example, see this repository's
 [Release PR workflow](https://github.com/chattocorp/sweet-release/blob/main/.github/workflows/release-pr.yml).
-It regenerates release branches from `main`, applies `sweet bump`, verifies the
-result, and creates or updates PRs. Make corrections through `main`, since the
-next run can overwrite edits on generated branches.
+It uses `RELEASE_PR_STRATEGY: per-package` in the workflow; set it to `combined`
+for one PR. Use combined mode for packages that share a version target, since
+separate PRs do not coordinate shared writes. The workflow verifies changed
+checkouts and cleans up obsolete PRs only after all jobs succeed. Make corrections
+through `main`, since the next run can overwrite edits on generated branches.

@@ -7,11 +7,28 @@ import (
 	"testing"
 )
 
+func TestDisplayNamesDoNotIdentifyPackages(t *testing.T) {
+	root, _, write, _ := tagFixture(t)
+	for _, path := range []string{"a", "b"} {
+		write(path+"/.sweet.yml", "version: 1.0.0\nname: Shared Name\n")
+		write(path+"/.sweet/note.md", "---\ntype: feature\n---\nNew feature.\n")
+	}
+	if releases, err := Bump(root, nil); err != nil || len(releases) != 2 {
+		t.Fatalf("releases: %v, %v", releases, err)
+	}
+	for _, path := range []string{"a", "b"} {
+		content, err := os.ReadFile(filepath.Join(root, path, "CHANGELOG.md"))
+		if err != nil || !strings.HasPrefix(string(content), "# Shared Name Changelog\n") {
+			t.Fatalf("%s, %v", content, err)
+		}
+	}
+}
+
 func TestChangelogReleaseAfterBumpWithListFences(t *testing.T) {
 	for _, marker := range []string{"", "- ", "* ", "+ ", "1. ", "1) ", "- 1. "} {
 		for _, fence := range []string{"```", "~~~"} {
 			t.Run(marker+fence, func(t *testing.T) {
-				root, write := releasePRFixture(t)
+				root, _, write, _ := tagFixture(t)
 				write(".sweet.yml", "version: 1.0.0\n")
 				write("CHANGELOG.md", "# Log\n\n## 1.0.0\n\nPrevious release.\n\n## 0.9.0\n\nOldest release.\n")
 				indent := strings.Repeat(" ", len(marker))
