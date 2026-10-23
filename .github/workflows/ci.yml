@@ -37,6 +37,8 @@ jobs:
         run: go test -race ./apps/sweet/...
       - name: Run static checks
         run: go vet ./apps/sweet/...
+      - name: Test release promotion
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
       - name: Build CLI
         run: go build -o bin/sweet ./apps/sweet/cmd/sweet
 

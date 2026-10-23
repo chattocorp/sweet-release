@@ -112,3 +112,10 @@ Use combined mode for packages that share a version target, since
 separate PRs do not coordinate shared writes. The workflow verifies changed
 checkouts and cleans up obsolete PRs only after all jobs succeed. Make corrections
 through `main`, since the next run can overwrite edits on generated branches.
+
+In this repository, merging a CLI release PR starts CI, tagging, and binary
+publishing. After publication, the release workflow marks the highest published
+stable CLI version as GitHub's Latest release. It includes historical CLI tag
+prefixes when comparing versions, but excludes drafts and prereleases. Publishing
+an older version does not displace a newer stable release. If Latest promotion
+fails, rerun the release workflow; already published binaries are left unchanged.
