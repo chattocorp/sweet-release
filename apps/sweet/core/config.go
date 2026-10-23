@@ -32,7 +32,7 @@ types:
     section: Performance
 `
 
-// ChangeType defines a type's release policy. An empty Section excludes it from changelogs.
+// ChangeType defines a type's release policy. An empty Section hides non-breaking notes.
 type ChangeType struct {
 	Name    string
 	Bump    string
