@@ -24,24 +24,42 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: pkg/sweet/go.mod
-          cache-dependency-path: pkg/sweet/go.sum
+          go-version-file: apps/sweet/go.mod
+          cache-dependency-path: apps/sweet/go.sum
       - name: Check formatting
         run: |
-          unformatted=$(gofmt -l pkg)
+          unformatted=$(gofmt -l apps/sweet)
           if [ -n "$unformatted" ]; then
             printf 'Run gofmt on these files:\n%s\n' "$unformatted"
             exit 1
           fi
       - name: Test with race detection
-        run: go test -race ./pkg/sweet/...
+        run: go test -race ./apps/sweet/...
       - name: Run static checks
-        run: go vet ./pkg/sweet/...
+        run: go vet ./apps/sweet/...
       - name: Build CLI
-        run: go build -o bin/sweet ./pkg/sweet/cmd/sweet
+        run: go build -o bin/sweet ./apps/sweet/cmd/sweet
+
+  docs:
+    name: Documentation checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: apps/docs/package.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: apps/docs/pnpm-lock.yaml
+      - run: pnpm --dir apps/docs install --frozen-lockfile
+      - run: pnpm --dir apps/docs run check
+      - run: pnpm --dir apps/docs run build
 
   tag:
-    needs: check
+    needs: [check, docs]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write

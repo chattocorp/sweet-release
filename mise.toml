@@ -1,24 +1,26 @@
 [tools]
 go = "1.27.3"
 goreleaser = "2.18.2"
+node = "24"
+pnpm = "12.5.1"
 
 [tasks.sweet]
 description = "Run sweet from source (forwards CLI arguments)"
-dir = "{{config_root}}/pkg/sweet/cmd/sweet"
+dir = "{{config_root}}/apps/sweet/cmd/sweet"
 run = "go run ."
 
 [tasks.deploy]
 description = "Install sweet into ~/.local/bin"
 env.GOBIN = "{{env.HOME}}/.local/bin"
-run = "go install ./pkg/sweet/cmd/sweet"
+run = "go install ./apps/sweet/cmd/sweet"
 
 [tasks.build]
 description = "Build the sweet CLI"
-run = "go build -o bin/sweet ./pkg/sweet/cmd/sweet"
+run = "go build -o bin/sweet ./apps/sweet/cmd/sweet"
 
 [tasks.test]
 description = "Run Go tests"
-run = "go test ./pkg/sweet/..."
+run = "go test ./apps/sweet/..."
 
 [tasks."release:check"]
 description = "Validate the GoReleaser configuration"
@@ -30,4 +32,24 @@ run = "goreleaser release --snapshot --clean"
 
 [tasks.check]
 description = "Run Go tests and static checks"
-run = ["go test ./pkg/sweet/...", "go vet ./pkg/sweet/..."]
+run = ["go test ./apps/sweet/...", "go vet ./apps/sweet/..."]
+
+[tasks."docs:install"]
+description = "Install documentation site dependencies"
+run = "pnpm --dir apps/docs install --frozen-lockfile"
+
+[tasks."docs:dev"]
+description = "Start the documentation site"
+run = "pnpm --dir apps/docs run dev"
+
+[tasks."docs:check"]
+description = "Check documentation site types and content"
+run = "pnpm --dir apps/docs run check"
+
+[tasks."docs:build"]
+description = "Build the documentation site"
+run = "pnpm --dir apps/docs run build"
+
+[tasks."docs:preview"]
+description = "Preview the built documentation site"
+run = "pnpm --dir apps/docs run preview"
