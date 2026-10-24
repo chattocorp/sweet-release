@@ -16,6 +16,49 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  release-actions:
+    name: Shared release actions (${{ matrix.version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [source, apps/sweet/v0.2.0]
+    # This exercises published-release retries without permission to mutate releases.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: apps/sweet/v0.2.0
+          fetch-depth: 0
+      - id: source
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: $/actions/github-release
+        id: draft
+        with:
+          phase: draft
+          package: apps/sweet
+          version: 0.2.0
+          tag: apps/sweet/v0.2.0
+          commit: ${{ steps.source.outputs.commit }}
+          sweet-version: ${{ matrix.version }}
+      - uses: $/actions/github-release
+        id: publish
+        with:
+          phase: publish
+          package: apps/sweet
+          version: 0.2.0
+          tag: apps/sweet/v0.2.0
+          commit: ${{ steps.source.outputs.commit }}
+      - name: Verify published release was preserved
+        env:
+          DRAFT_PUBLISHED: ${{ steps.draft.outputs.published }}
+          PUBLISHED: ${{ steps.publish.outputs.published }}
+        run: |
+          [[ "$DRAFT_PUBLISHED" == true && "$PUBLISHED" == true ]]
+          sweet --version
+
   setup-action:
     name: Install released CLI (${{ matrix.os }})
     strategy:
@@ -81,7 +124,7 @@ jobs:
       - run: pnpm --dir apps/docs run build
 
   tag:
-    needs: [check, docs, setup-action]
+    needs: [check, docs, setup-action, release-actions]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
