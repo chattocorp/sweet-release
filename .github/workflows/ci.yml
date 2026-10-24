@@ -128,12 +128,68 @@ jobs:
       - run: pnpm --dir apps/docs run check
       - run: pnpm --dir apps/docs run build
 
-  tag:
+  release:
     needs: [check, docs, setup-action, release-actions]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
-    uses: ./.github/workflows/tag-releases.yml
+    uses: ./.github/workflows/release.yml
     with:
       base: ${{ github.event.before }}
       head: ${{ github.sha }}
+      sweet-version: source
+      draft: true
+
+  select-releases:
+    needs: release
+    runs-on: ubuntu-latest
+    outputs:
+      cli: ${{ steps.select.outputs.cli }}
+      notes: ${{ steps.select.outputs.notes }}
+    steps:
+      - id: select
+        env:
+          RELEASES: ${{ needs.release.outputs.releases }}
+        run: |
+          cli=$(jq -c '[.[] | select(.package == "apps/sweet" or .package == "pkg/sweet" or .package == "pkg/cli")]' <<< "$RELEASES")
+          notes=$(jq -c '[.[] | select(.package != "apps/sweet" and .package != "pkg/sweet" and .package != "pkg/cli")]' <<< "$RELEASES")
+          echo "cli=$cli" >> "$GITHUB_OUTPUT"
+          echo "notes=$notes" >> "$GITHUB_OUTPUT"
+
+  publish-notes:
+    needs: select-releases
+    if: needs.select-releases.outputs.notes != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.select-releases.outputs.notes) }}
+    concurrency:
+      group: sweet-github-release-${{ matrix.tag }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.commit }}
+          fetch-depth: 0
+      - uses: $/actions/github-release
+        with:
+          phase: publish
+          tag: ${{ matrix.tag }}
+          commit: ${{ matrix.commit }}
+
+  publish-cli:
+    needs: select-releases
+    if: needs.select-releases.outputs.cli != '[]'
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.select-releases.outputs.cli) }}
+    uses: ./.github/workflows/publish-cli.yml
+    with:
+      tag: ${{ matrix.tag }}
+      commit: ${{ matrix.commit }}

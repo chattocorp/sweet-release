@@ -1,0 +1,22 @@
+name: Prepare releases
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-pr:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/release-pr.yml
+    with:
+      # Exercise unreleased CLI changes here. Consumers use a binary release.
+      sweet-version: source
+      strategy: per-package
+      prepare-command: bash .github/scripts/prepare-release.sh
+    secrets:
+      release-token: ${{ secrets.RELEASE_PR_TOKEN }}

@@ -109,7 +109,7 @@ updated changelogs with `sweet changelog <package> --version <version>`.
 
 For reusable workflows and binary installation, see [GitHub Actions](../github-actions/).
 For a working automation example, see this repository's
-[Release PR workflow](https://github.com/chattocorp/sweet-release/blob/main/.github/workflows/release-pr.yml).
+[Release PR workflow](https://github.com/chattocorp/sweet-release/blob/main/.github/workflows/prepare-releases.yml).
 It passes `strategy: per-package` to the shared workflow; set it to `combined`
 for one PR. Individual package PR titles include the display name (or path) and
 bumped version, such as `chore: release Sweet Release 0.2.0`.

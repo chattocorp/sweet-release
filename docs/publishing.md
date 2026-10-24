@@ -1,7 +1,7 @@
 # CLI publishing
 
-After tags are pushed, the tag workflow calls `.github/workflows/release.yml`
-for each software release in the plan. Only `apps/sweet` and historical
+After drafts are prepared, CI calls `.github/workflows/publish-cli.yml`
+for each CLI release in the plan. Only `apps/sweet` and historical
 `pkg/sweet` and `pkg/cli`
 releases build binaries; other packages publish GitHub Release notes without assets.
 The shared release workflow creates drafts for all planned package releases.
@@ -19,7 +19,7 @@ and `pkg/sweet` or `pkg/cli` for historical tags. You can publish or retry
 an existing CLI tag from main manually:
 
 ```sh
-gh workflow run release.yml --ref main -f tag=apps/sweet/v0.1.0
+gh workflow run publish-cli.yml --ref main -f tag=apps/sweet/v0.1.0
 ```
 
 GoReleaser's free edition builds archives in snapshot mode with an explicit

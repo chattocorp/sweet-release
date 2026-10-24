@@ -57,7 +57,7 @@ The workflow reports an error if the secret is missing. Checkout, release PR
 cleanup, tagging, and publishing continue to use the built-in `GITHUB_TOKEN`.
 The shared workflow detects the personal token's login for cleanup. If you switch
 to an App installation token, pass its bot login through `pr-author` in
-`.github/workflows/release-pr.yml`. PRs owned by a previous login are left alone.
+`.github/workflows/prepare-releases.yml`. PRs owned by a previous login are left alone.
 
 ## Documentation site development
 

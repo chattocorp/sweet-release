@@ -1,22 +1,183 @@
-name: Release PR
+name: Release PRs
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      base-branch:
+        description: Branch to prepare releases from and open PRs into.
+        type: string
+        default: main
+      strategy:
+        description: per-package or combined.
+        type: string
+        default: per-package
+      sweet-version:
+        description: Sweet release tag, latest, or source for development.
+        type: string
+        default: latest
+      prepare-command:
+        description: Bash commands to update lockfiles and verify changes after bumping.
+        type: string
+        default: ''
+      pr-author:
+        description: Login that owns release PRs; empty detects a user token's login.
+        type: string
+        default: ''
+    secrets:
+      release-token:
+        description: Token with contents and pull requests write access.
+        required: true
 
 permissions:
   contents: write
   pull-requests: write
 
+# PR policy belongs to this integration, not .sweet.config.yml.
+env:
+  RELEASE_PR_STRATEGY: ${{ inputs.strategy }}
+
+# Serialize whole runs, including cleanup. Each run reads the current base branch.
+concurrency:
+  group: sweet-release-pr-${{ inputs.base-branch }}
+  cancel-in-progress: false
+
 jobs:
-  release-pr:
-    if: github.ref == 'refs/heads/main'
-    uses: ./.github/workflows/reusable-release-pr.yml
-    with:
-      # Exercise unreleased CLI changes here. Consumers use a binary release.
-      sweet-version: source
-      strategy: per-package
-      prepare-command: bash .github/scripts/prepare-release.sh
-    secrets:
-      release-token: ${{ secrets.RELEASE_PR_TOKEN }}
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      prs: ${{ steps.plan.outputs.prs }}
+      sha: ${{ steps.plan.outputs.sha }}
+      sweet-tag: ${{ steps.tooling.outputs.tag }}
+      author: ${{ steps.author.outputs.login }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.base-branch }}
+      - id: tooling
+        uses: $/actions/tooling
+        with:
+          sweet-version: ${{ inputs.sweet-version }}
+      - name: Identify release PR owner
+        id: author
+        env:
+          GH_TOKEN: ${{ secrets.release-token }}
+          PR_AUTHOR: ${{ inputs.pr-author }}
+        run: |
+          if [[ -z "$PR_AUTHOR" ]]; then
+            PR_AUTHOR=$(gh api user --jq .login)
+          fi
+          [[ "$PR_AUTHOR" =~ ^[a-zA-Z0-9-]+(\[bot\])?$ ]]
+          echo "login=$PR_AUTHOR" >> "$GITHUB_OUTPUT"
+      - name: Plan release PRs
+        id: plan
+        env:
+          SCRIPTS: ${{ steps.tooling.outputs.scripts }}
+        run: |
+          sweet status --json > "$RUNNER_TEMP/packages.json"
+          prs=$(python3 "$SCRIPTS/release-pr.py" matrix "$RELEASE_PR_STRATEGY" < "$RUNNER_TEMP/packages.json")
+          printf 'prs=%s\n' "$prs" >> "$GITHUB_OUTPUT"
+          printf 'sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  prepare:
+    needs: plan
+    if: needs.plan.outputs.prs != '[]'
+    name: ${{ matrix.title }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.prs) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 0
+      - id: tooling
+        uses: $/actions/tooling
+        with:
+          sweet-version: ${{ needs.plan.outputs.sweet-tag }}
+      - name: Prepare pending releases
+        id: prepare
+        env:
+          RELEASE_JOB: ${{ toJSON(matrix) }}
+          SCRIPTS: ${{ steps.tooling.outputs.scripts }}
+        run: |
+          changed=$(python3 "$SCRIPTS/release-pr.py" prepare "$(command -v sweet)" "$RELEASE_JOB" "$RUNNER_TEMP/release")
+          printf 'changed=%s\n' "$changed" >> "$GITHUB_OUTPUT"
+          printf 'title=%s\n' "$(cat "$RUNNER_TEMP/release/title.txt")" >> "$GITHUB_OUTPUT"
+      - name: Run project preparation
+        if: steps.prepare.outputs.changed == 'true' && inputs.prepare-command != ''
+        env:
+          PREPARE_COMMAND: ${{ inputs.prepare-command }}
+          RELEASE_JOB: ${{ toJSON(matrix) }}
+        run: bash -e -o pipefail -c "$PREPARE_COMMAND"
+      - name: Verify prepared changes
+        if: steps.prepare.outputs.changed == 'true'
+        run: |
+          git diff --check
+      - name: Create or update release PR
+        if: steps.prepare.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          # Use a PAT so PR checks run without manual workflow approval.
+          token: ${{ secrets.release-token }}
+          base: ${{ inputs.base-branch }}
+          # The workflow assigns stable branches so each open PR is reused.
+          branch: ${{ matrix.branch }}
+          delete-branch: true
+          commit-message: 'chore: prepare releases'
+          title: ${{ steps.prepare.outputs.title }}
+          body-path: ${{ runner.temp }}/release/body.md
+      - name: Record desired release PR
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweet-release-result-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/release/desired.json
+          if-no-files-found: error
+          overwrite: true
+
+  cleanup:
+    needs: [plan, prepare]
+    if: >-
+      always() && !cancelled() && needs.plan.result == 'success' &&
+      (needs.prepare.result == 'success' ||
+       (needs.prepare.result == 'skipped' && needs.plan.outputs.prs == '[]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - id: tooling
+        uses: $/actions/tooling
+        with:
+          install: 'false'
+      - uses: actions/download-artifact@v4
+        if: needs.plan.outputs.prs != '[]'
+        with:
+          pattern: sweet-release-result-${{ github.run_id }}-${{ github.run_attempt }}-*
+          path: ${{ runner.temp }}/release-results
+      - name: Remove obsolete release PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_JOBS: ${{ needs.plan.outputs.prs }}
+          PLANNED_SHA: ${{ needs.plan.outputs.sha }}
+          BASE_BRANCH: ${{ inputs.base-branch }}
+          RELEASE_PR_AUTHOR: ${{ needs.plan.outputs.author }}
+          SCRIPTS: ${{ steps.tooling.outputs.scripts }}
+        run: |
+          export RELEASE_PRS='[]'
+          if [[ "$RELEASE_JOBS" != '[]' ]]; then
+            # Missing results must stop cleanup, not be treated as no releases.
+            expected=$(jq 'length' <<< "$RELEASE_JOBS")
+            files=("$RUNNER_TEMP"/release-results/*/desired.json)
+            [[ ${#files[@]} -eq "$expected" ]]
+            RELEASE_PRS=$(jq -sc 'add' "${files[@]}")
+          fi
+          encoded=$(jq -rn --arg branch "$BASE_BRANCH" '$branch | @uri')
+          current=$(gh api "repos/$GITHUB_REPOSITORY/commits/$encoded" --jq .sha)
+          if [[ "$current" != "$PLANNED_SHA" ]]; then
+            echo 'Base branch changed during this run; leave cleanup to the next run.'
+            exit 0
+          fi
+          bash "$SCRIPTS/cleanup-release-prs.sh"

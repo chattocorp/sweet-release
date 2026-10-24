@@ -1,11 +1,11 @@
 # Release PRs
 
-The `Release PR` workflow runs on pushes to `main` or manual dispatch on `main`.
+The `Prepare releases` workflow runs on pushes to `main` or manual dispatch on `main`.
 It lists packages on current `main` with `sweet status --json`, then uses independent
 checkouts of that commit to run `sweet bump` and verify the changed files. It uses
 `peter-evans/create-pull-request` to create or update PRs into `main`.
-The caller `.github/workflows/release-pr.yml` delegates to
-`.github/workflows/reusable-release-pr.yml`. It uses `sweet-version: source` to
+The caller `.github/workflows/prepare-releases.yml` delegates to
+`.github/workflows/release-pr.yml`. It uses `sweet-version: source` to
 exercise unreleased CLI changes; external callers install a binary release.
 Configure PR policy in the caller:
 

@@ -7,6 +7,11 @@ Sweet provides a setup action and two reusable workflows. The workflows run on
 GitHub-hosted Ubuntu runners. They download a published Sweet binary by default;
 consumers do not need Go or copies of Sweet's helper scripts.
 
+| Workflow | Purpose |
+| --- | --- |
+| `release-pr.yml` | Prepare version bumps and create or update release PRs. |
+| `release.yml` | Tag committed versions and create GitHub Releases. |
+
 The examples use `@main` after these files have merged. For production, replace
 `@main` with a full commit SHA. The action revision and CLI release tag are separate
 versions. There is no `actions-v1` tag yet. Internal action references use GitHub's
@@ -48,7 +53,7 @@ permissions:
   pull-requests: write
 jobs:
   releases:
-    uses: chattocorp/sweet-release/.github/workflows/reusable-release-pr.yml@main
+    uses: chattocorp/sweet-release/.github/workflows/release-pr.yml@main
     with:
       sweet-version: apps/sweet/v0.2.0
       strategy: per-package
@@ -110,7 +115,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
-    uses: chattocorp/sweet-release/.github/workflows/reusable-release.yml@main
+    uses: chattocorp/sweet-release/.github/workflows/release.yml@main
     with:
       base: ${{ github.event.before }}
       head: ${{ github.sha }}
@@ -222,7 +227,7 @@ which package owns Latest and serialize any repository-wide selection policy.
 This repository uses the shared workflows with `sweet-version: source` to test
 unreleased CLI behavior. That development option builds from the automation
 revision and requires Go. Consumers should use a binary release. The local
-GoReleaser workflow builds and uploads Sweet binaries between the shared draft
+`publish-cli.yml` workflow builds and uploads Sweet binaries with GoReleaser between the shared draft
 and publish steps. Documentation releases publish their notes without assets.
 
 CI also runs integration tests with a real Sweet binary, temporary Git repositories
