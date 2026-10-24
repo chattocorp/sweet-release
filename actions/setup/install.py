@@ -17,7 +17,7 @@ REPOSITORY = "chattocorp/sweet-release"
 
 def asset_name(version, system, machine):
     operating_system = {"Linux": "linux", "Darwin": "darwin", "Windows": "windows"}[system]
-    architecture = {"x86_64": "amd64", "AMD64": "amd64", "aarch64": "arm64", "arm64": "arm64"}[machine]
+    architecture = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}[machine.lower()]
     extension = "zip" if operating_system == "windows" else "tar.gz"
     return f"sweet_{version}_{operating_system}_{architecture}.{extension}"
 

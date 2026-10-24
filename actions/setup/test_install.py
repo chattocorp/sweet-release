@@ -20,6 +20,7 @@ class InstallerTests(unittest.TestCase):
             ("Linux", "aarch64", "linux_arm64.tar.gz"),
             ("Darwin", "arm64", "darwin_arm64.tar.gz"),
             ("Windows", "AMD64", "windows_amd64.zip"),
+            ("Windows", "ARM64", "windows_arm64.zip"),
         ]:
             self.assertEqual(installer.asset_name("1.2.3", system, machine), f"sweet_1.2.3_{suffix}")
         with self.assertRaises(KeyError):
