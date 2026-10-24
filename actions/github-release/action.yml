@@ -2,14 +2,12 @@ name: Manage a GitHub Release
 description: Prepare a draft from Sweet metadata or publish it after asset uploads succeed.
 inputs:
   phase:
-    description: draft or publish. Publish requires an existing release.
+    description: status, draft, or publish. Publish requires an existing release.
     required: true
   package:
-    description: Package directory relative to the checked-out repository root.
-    required: true
+    description: Package directory relative to the repository root (draft phase only).
   version:
-    description: Package version at the release commit.
-    required: true
+    description: Package version at the release commit (draft phase only).
   tag:
     description: Existing release tag.
     required: true
@@ -26,6 +24,9 @@ inputs:
     description: Token with contents write permission.
     default: ${{ github.token }}
 outputs:
+  state:
+    description: missing, draft, or published.
+    value: ${{ steps.release.outputs.state }}
   published:
     description: true if the release is already published (skip builds and uploads).
     value: ${{ steps.release.outputs.published }}

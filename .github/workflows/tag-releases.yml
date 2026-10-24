@@ -58,8 +58,6 @@ jobs:
       - uses: $/actions/github-release
         with:
           phase: publish
-          package: ${{ matrix.package }}
-          version: ${{ matrix.version }}
           tag: ${{ matrix.tag }}
           commit: ${{ matrix.commit }}
 

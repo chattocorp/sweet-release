@@ -38,6 +38,7 @@ jobs:
           cp .goreleaser.yml "$RUNNER_TEMP/goreleaser.yml"
           cp .github/scripts/publish-cli.sh "$RUNNER_TEMP/publish-cli.sh"
           cp .github/scripts/check-go.sh "$RUNNER_TEMP/check-go.sh"
+          cp actions/github-release/release.py "$RUNNER_TEMP/sweet-release.py"
       - name: Check out release source
         id: source
         env:
@@ -55,8 +56,17 @@ jobs:
             pkg/cli/v*) package=pkg/cli; version=${TAG#pkg/cli/v} ;;
           esac
           printf 'package=%s\nversion=%s\ncommit=%s\n' "$package" "$version" "$commit" >> "$GITHUB_OUTPUT"
-      - name: Prepare GitHub Release
-        id: draft
+      - name: Check GitHub Release
+        id: status
+        uses: $/actions/github-release
+        with:
+          phase: status
+          tag: ${{ inputs.tag }}
+          commit: ${{ steps.source.outputs.commit }}
+      # Normal CI already created the draft. Manual dispatch can prepare a
+      # missing release without repeating work for existing drafts or publications.
+      - name: Prepare missing GitHub Release
+        if: steps.status.outputs.state == 'missing'
         uses: $/actions/github-release
         with:
           phase: draft
@@ -66,12 +76,12 @@ jobs:
           commit: ${{ steps.source.outputs.commit }}
           sweet-version: source
       - name: Select release Go module
-        if: steps.draft.outputs.published != 'true'
+        if: steps.status.outputs.published != 'true'
         id: release-go
         run: |
           echo "version-file=$(bash "$RUNNER_TEMP/check-go.sh" version-file)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v7
-        if: steps.draft.outputs.published != 'true'
+        if: steps.status.outputs.published != 'true'
         with:
           go-version-file: ${{ steps.release-go.outputs.version-file }}
           cache-dependency-path: |
@@ -81,24 +91,23 @@ jobs:
             pkg/cli/go.sum
             pkg/core/go.sum
       - uses: goreleaser/goreleaser-action@v7
-        if: steps.draft.outputs.published != 'true'
+        if: steps.status.outputs.published != 'true'
         with:
           version: v2.18.2
           install-only: true
       - name: Build and upload CLI assets
-        if: steps.draft.outputs.published != 'true'
+        if: steps.status.outputs.published != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ inputs.tag }}
           SWEET_GO_CHECK: ${{ runner.temp }}/check-go.sh
+          SWEET_RELEASE_TOOL: ${{ runner.temp }}/sweet-release.py
         run: bash "$RUNNER_TEMP/publish-cli.sh" "$TAG" "$RUNNER_TEMP/goreleaser.yml"
       - name: Publish GitHub Release
         uses: $/actions/github-release
         with:
           phase: publish
-          package: ${{ steps.source.outputs.package }}
-          version: ${{ steps.source.outputs.version }}
           tag: ${{ inputs.tag }}
           commit: ${{ steps.source.outputs.commit }}
 

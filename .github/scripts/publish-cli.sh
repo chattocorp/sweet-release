@@ -15,9 +15,9 @@ if [[ "$tag" == sweet@* ]]; then version=${tag#sweet@}; fi
 [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse --verify "refs/tags/$tag^{commit}")" ]]
 
-# Listing fails on API/auth errors rather than treating them as a missing release.
-releases=$(gh api --paginate 'repos/{owner}/{repo}/releases?per_page=100' --jq '.[] | {tag_name, draft}')
-state=$(jq -sr --arg tag "$tag" 'map(select(.tag_name == $tag)) | if length == 0 then "missing" elif .[0].draft then "draft" else "published" end' <<< "$releases")
+release_tool=${SWEET_RELEASE_TOOL:?Set SWEET_RELEASE_TOOL to the shared release helper}
+commit=$(git rev-parse HEAD)
+state=$(python3 "$release_tool" status "$tag" "$commit")
 if [[ "$state" == published ]]; then
   echo "$tag is already published."
   exit 0
@@ -39,4 +39,6 @@ goreleaser release --snapshot --clean --config "$temporary/goreleaser.yml"
 # Verify the actual binary, including the linker-supplied version.
 [[ "$(dist/sweet_linux_amd64_v1/sweet --version)" == "sweet $version" ]]
 (cd dist && sha256sum --check checksums.txt)
+# Recheck after the build: neither a moved tag nor a published draft is writable.
+[[ "$(python3 "$release_tool" status "$tag" "$commit")" == draft ]]
 gh release upload "$tag" dist/*.tar.gz dist/*.zip dist/checksums.txt --clobber

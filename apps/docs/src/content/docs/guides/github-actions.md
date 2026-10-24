@@ -154,16 +154,13 @@ publish:
         ref: ${{ matrix.commit }}
         fetch-depth: 0
     - uses: chattocorp/sweet-release/actions/github-release@main
-      id: draft
+      id: status
       with:
-        phase: draft
-        package: ${{ matrix.package }}
-        version: ${{ matrix.version }}
+        phase: status
         tag: ${{ matrix.tag }}
         commit: ${{ matrix.commit }}
-        sweet-version: apps/sweet/v0.2.0
     - name: Build and upload assets
-      if: steps.draft.outputs.published != 'true'
+      if: steps.status.outputs.state == 'draft'
       env:
         GH_TOKEN: ${{ github.token }}
         PACKAGE: ${{ matrix.package }}
@@ -173,8 +170,6 @@ publish:
     - uses: chattocorp/sweet-release/actions/github-release@main
       with:
         phase: publish
-        package: ${{ matrix.package }}
-        version: ${{ matrix.version }}
         tag: ${{ matrix.tag }}
         commit: ${{ matrix.commit }}
 ```
@@ -188,19 +183,37 @@ another push workflow, so connect publishing through `needs`. See GitHub's
 
 ### GitHub Release action
 
-`actions/github-release` has two phases: `draft` creates or updates release notes,
-and `publish` publishes an existing draft. It requires `package`, `version`, `tag`,
-and a full `commit` SHA. Check out that commit with full history first. The action
-rejects mismatched checkouts and tags. The draft phase verifies the manifest version
-and reads the changelog at that commit, even when a push contains several releases.
+`actions/github-release` has three phases. Each requires `tag` and a full `commit`
+SHA. Check out that commit with full history and an `origin` remote pointing to
+the target repository.
+
+| Phase | Behavior | Additional inputs |
+| --- | --- | --- |
+| `status` | Read state without installing Sweet or changing the release. | None |
+| `draft` | Create or refresh release notes at the tag commit. | `package`, `version`; optional `sweet-version` |
+| `publish` | Publish an existing draft after asset jobs succeed. | Optional `latest` |
+
+The `state` output is `missing`, `draft`, or `published`. The reusable workflow
+already prepares drafts, so downstream asset jobs only need `status` and `publish`.
+Standalone/manual jobs can call `draft` when `status` returns `missing`.
+
+The action rejects mismatched checkouts, local tags, and remote tags. It checks the
+remote tag again immediately before a release mutation. A moved or deleted tag
+stops publication. These checks are not a lock on remote Git refs; protect release
+tags against deletion and force updates to prevent changes during API requests.
+The draft phase verifies the manifest version and reads the changelog at that
+commit, even when a push contains several releases.
 
 The `published` output is `true` for an already published release, allowing asset
 jobs to skip rebuilding. Published releases and their assets are left unchanged
 on retries. API errors fail the action; they do not count as missing releases.
-`token` defaults to `github.token` and needs Contents write access.
+State lookup queries the requested tag, rather than listing all releases. A missing
+release is distinct from an inaccessible repository or API error. `token` defaults
+to `github.token`; mutations need Contents write access.
 
 Sweet defaults to `latest: 'false'`. To designate a release as GitHub's Latest,
-pass `latest: 'true'` to the publish phase. Prereleases cannot be Latest. This is
+pass `latest: 'true'` to the publish phase. The action checks the existing release's
+prerelease flag; the caller does not repeat its version. Prereleases cannot be Latest. This is
 an explicit selection, not a highest-version comparison. Monorepos should define
 which package owns Latest and serialize any repository-wide selection policy.
 
@@ -211,3 +224,8 @@ unreleased CLI behavior. That development option builds from the automation
 revision and requires Go. Consumers should use a binary release. The local
 GoReleaser workflow builds and uploads Sweet binaries between the shared draft
 and publish steps. Documentation releases publish their notes without assets.
+
+CI also runs integration tests with a real Sweet binary, temporary Git repositories
+and a bare remote. A stateful fake GitHub CLI exercises fresh drafts, uploads,
+publication, retries, API failures, and moved/deleted tags without publishing test
+releases. Hosted smoke checks separately exercise real read-only GitHub API calls.

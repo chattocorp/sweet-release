@@ -35,6 +35,12 @@ jobs:
       - id: source
         run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: $/actions/github-release
+        id: status
+        with:
+          phase: status
+          tag: apps/sweet/v0.2.0
+          commit: ${{ steps.source.outputs.commit }}
+      - uses: $/actions/github-release
         id: draft
         with:
           phase: draft
@@ -47,16 +53,15 @@ jobs:
         id: publish
         with:
           phase: publish
-          package: apps/sweet
-          version: 0.2.0
           tag: apps/sweet/v0.2.0
           commit: ${{ steps.source.outputs.commit }}
       - name: Verify published release was preserved
         env:
           DRAFT_PUBLISHED: ${{ steps.draft.outputs.published }}
+          STATE: ${{ steps.status.outputs.state }}
           PUBLISHED: ${{ steps.publish.outputs.published }}
         run: |
-          [[ "$DRAFT_PUBLISHED" == true && "$PUBLISHED" == true ]]
+          [[ "$STATE" == published && "$DRAFT_PUBLISHED" == true && "$PUBLISHED" == true ]]
           sweet --version
 
   setup-action:

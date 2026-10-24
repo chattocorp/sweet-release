@@ -45,8 +45,14 @@ uses the shared action's current metadata binary to read the tagged changelog, s
 tags do not need to support this command.
 
 `actions/github-release` first prepares a draft from the package metadata at the
-verified tag commit. The build script refuses to upload without an existing draft.
-The action's publish phase runs only after all builds and uploads succeed.
+verified tag commit. Downstream build jobs use the lightweight `status` phase
+instead of regenerating draft notes. Manual dispatch prepares a draft only if
+one is missing. The build script calls the same state helper before building and
+again before uploading, and refuses to upload without an existing draft.
+The action's publish phase runs only after all builds and uploads succeed. It
+requires only the tag and commit; it reads prerelease status from GitHub. Remote
+tag commits are checked before release mutations, so a moved/deleted remote tag
+cannot silently pass validation using a stale local tag.
 A retry replaces assets in an unfinished draft; an already published release is
 left unchanged. The `published` output skips rebuilding on retries. API errors
 stop the job. Prerelease versions produce GitHub
