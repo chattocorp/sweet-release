@@ -9,6 +9,46 @@ import (
 	"testing"
 )
 
+func TestBumpSinglePackage(t *testing.T) {
+	for _, dir := range []string{".", "pkg/api"} {
+		t.Run(dir, func(t *testing.T) {
+			root := t.TempDir()
+			t.Chdir(root)
+			if output, err := exec.Command("git", "init").CombinedOutput(); err != nil {
+				t.Fatalf("%s: %v", output, err)
+			}
+			if err := os.MkdirAll(filepath.Join(dir, ".sweet"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			manifest := filepath.Join(dir, ".sweet.yml")
+			note := filepath.Join(dir, ".sweet", "fix.md")
+			for path, body := range map[string]string{
+				manifest: "version: 1.2.3\n",
+				note:     "---\ntype: fix\n---\n\nFixed a bug.\n",
+			} {
+				if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"bump"}, &stdout, &stderr); code != 0 {
+				t.Fatalf("code %d, stdout %s, stderr %s", code, &stdout, &stderr)
+			}
+			data, err := os.ReadFile(manifest)
+			if err != nil || !strings.Contains(string(data), "1.3.0") {
+				t.Fatalf("manifest = %q, error = %v", data, err)
+			}
+			if _, err := os.Stat(note); !os.IsNotExist(err) {
+				t.Fatalf("note remains: %v", err)
+			}
+			stdout.Reset()
+			if code := run([]string{"bump"}, &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), "No packages need a release.") {
+				t.Fatalf("repeat bump: code %d, stdout %s, stderr %s", code, &stdout, &stderr)
+			}
+		})
+	}
+}
+
 func TestBumpWorkflow(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)

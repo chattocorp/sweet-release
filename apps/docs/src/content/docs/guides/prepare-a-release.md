@@ -17,15 +17,19 @@ Invalid manifests or notes appear in the problems list.
 ## Choose packages
 
 ```sh
-sweet bump                   # Open a searchable package picker
+sweet bump                   # Select the only package, or open a package picker
 sweet bump pkg/api pkg/web   # Select packages by directory
 sweet bump .                 # Select the current package
 sweet bump --all             # Select all eligible packages
 ```
 
+With one package in the repository, `sweet bump` selects it automatically,
+including when no terminal is available. With multiple packages, it opens a
+searchable picker for pending releases.
+
 Paths are relative to the current directory. In the picker, use Space to select
 packages and Enter to prepare them. With no selection, Enter prepares the
-highlighted package. Without a terminal, supply paths or `--all`.
+highlighted package. With multiple packages and no terminal, supply paths or `--all`.
 
 For each selected package with a pending bump, Sweet updates `.sweet.yml`,
 configured version files, and `CHANGELOG.md`. It then deletes all consumed notes,
