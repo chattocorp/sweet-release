@@ -1,4 +1,4 @@
-"""Internal GitHub release lifecycle for this repository's release policy."""
+"""GitHub release lifecycle used by the reusable release workflow, not the CLI."""
 
 import json
 import os
@@ -42,8 +42,8 @@ def verify_remote_tag(tag, commit):
 
 
 def manage(phase, tag, commit, package="", version="", latest="false"):
-    if phase not in ("status", "draft", "publish") or latest not in ("true", "false"):
-        raise ValueError("phase must be status, draft or publish; latest must be true or false")
+    if phase not in ("status", "draft", "publish") or latest not in ("auto", "true", "false"):
+        raise ValueError("phase must be status, draft or publish; latest must be auto, true or false")
     if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", commit):
         raise ValueError("commit must be a full SHA")
     run("git", "check-ref-format", f"refs/tags/{tag}")
@@ -67,7 +67,7 @@ def manage(phase, tag, commit, package="", version="", latest="false"):
         # --verify-tag on edit needs --tag; --target also prevents default-branch
         # fallback if the tag disappears between the remote check and the request.
         run("gh", "release", "edit", tag, "--tag", tag, "--verify-tag", "--target", commit,
-            "--draft=false", f"--latest={latest}")
+            "--draft=false", *([] if latest == "auto" else [f"--latest={latest}"]))
         return "published"
 
     if not package or not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", version):
