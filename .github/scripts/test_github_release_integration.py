@@ -166,6 +166,22 @@ class ReleaseIntegrationTests(unittest.TestCase):
         result = subprocess.run(command, cwd=self.repo, env=env, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertTrue(self.record()["isDraft"])
+        # Model the hosted runner's locked toolchain during build-tool install.
+        builder.unlink()
+        go = self.bin / "go"
+        go.write_text('#!/bin/sh\n[ "$GOTOOLCHAIN" = auto ] || exit 99\necho toolchain-auto >&2\nexit 1\n')
+        go.chmod(0o755)
+        # Exclude any GoReleaser installed on the test host.
+        for executable in ("bash", "python3", "git", "dirname", "mktemp"):
+            (self.bin / executable).symlink_to(shutil.which(executable))
+        result = subprocess.run(command, cwd=self.repo,
+                                env=dict(env, GOTOOLCHAIN="local", RUNNER_TEMP=str(self.root),
+                                         PATH=os.pathsep.join([str(self.bin), self.build.name])),
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("toolchain-auto", result.stderr)
+        self.assertTrue(self.record()["isDraft"])
+        go.unlink()
         builder.write_text('''#!/usr/bin/env python3
 from pathlib import Path
 import hashlib
@@ -181,6 +197,7 @@ for name in ("artifact.tar.gz", "artifact.zip"):
     checksums.append(hashlib.sha256(b"fixture").hexdigest() + "  " + name)
 (root / "checksums.txt").write_text("\\n".join(checksums) + "\\n")
 ''')
+        builder.chmod(0o755)
         result = subprocess.run(command, cwd=self.repo, env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(self.record()["isDraft"])

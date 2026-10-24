@@ -18,7 +18,8 @@ case "$RELEASE_PACKAGE" in
     # Install the pinned build tool if it is not already available.
     if ! command -v goreleaser > /dev/null; then
       release_bin=$(mktemp -d "$RUNNER_TEMP/sweet-build-XXXXXX")
-      GOBIN="$release_bin" go install github.com/goreleaser/goreleaser/v2@v2.18.2
+      # The build tool can require a newer Go patch than Sweet itself.
+      GOTOOLCHAIN=auto GOBIN="$release_bin" go install github.com/goreleaser/goreleaser/v2@v2.18.2
       export PATH="$release_bin:$PATH"
     fi
     bash "$tooling/.github/scripts/publish-cli.sh" "$RELEASE_TAG" "$tooling/.goreleaser.yml"
