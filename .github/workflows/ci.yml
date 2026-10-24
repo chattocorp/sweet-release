@@ -138,16 +138,15 @@ jobs:
 
   release:
     needs: [check, docs, setup-action, release-policy, release-contract]
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
     uses: ./.github/workflows/release.yml
     with:
-      # One-off recovery: retain the original release range and tagged source.
-      base: ${{ github.event_name == 'workflow_dispatch' && '6e0540d1d474fd83577c85f3f896f43dae275b88' || github.event.before }}
-      head: ${{ github.event_name == 'workflow_dispatch' && 'fc9e0dea13c61edf7bdd0a04a21eca0f68a72e35' || github.sha }}
+      base: ${{ github.event.before }}
+      head: ${{ github.sha }}
       sweet-version: source
-      release-command: bash "$SCRIPTS/release-package.sh"
+      release-command: bash .github/scripts/release-package.sh
 
   promote-latest:
     needs: release
