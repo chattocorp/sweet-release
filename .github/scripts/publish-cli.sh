@@ -22,7 +22,7 @@ if [[ "$state" == published ]]; then
   exit 0
 fi
 if [[ "$state" != draft ]]; then
-  echo 'Prepare a draft with the Sweet GitHub Release action before uploading.' >&2
+  echo 'Prepare a draft with release-package.sh before uploading.' >&2
   exit 1
 fi
 
