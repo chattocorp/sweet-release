@@ -132,6 +132,65 @@ class ReleaseIntegrationTests(unittest.TestCase):
         self.assertFalse(self.mutations())
         self.assertFalse((self.root / "release.json").exists())
 
+    def test_repository_policy_publishes_notes_and_retries(self):
+        env = dict(self.env, RELEASE_PACKAGE=".", RELEASE_VERSION="0.1.0",
+                   RELEASE_TAG=self.tag, RELEASE_COMMIT=self.commit)
+        command = ["bash", str(ROOT / ".github/scripts/release-package.sh")]
+        result = subprocess.run(command, cwd=self.repo, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.record()["isDraft"])
+        count = len(self.mutations())
+        result = subprocess.run(command, cwd=self.repo, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.mutations()), count)
+
+    def test_repository_policy_build_failure_leaves_draft_then_retry_publishes(self):
+        if not shutil.which("sha256sum"):
+            self.skipTest("CLI uploader requires sha256sum")
+        package = self.repo / "apps/sweet"
+        package.mkdir(parents=True)
+        for name in (".sweet.yml", "CHANGELOG.md"):
+            (self.repo / name).rename(package / name)
+        self.git("add", ".")
+        self.git("commit", "-m", "CLI release fixture")
+        self.commit = self.git("rev-parse", "HEAD")
+        self.tag = "apps/sweet/v0.1.0"
+        self.git("tag", "-a", self.tag, "-m", "Release")
+        self.git("push", "origin", "--tags")
+        builder = self.bin / "goreleaser"
+        builder.write_text("#!/bin/sh\nexit 1\n")
+        builder.chmod(0o755)
+        env = dict(self.env, RELEASE_PACKAGE="apps/sweet", RELEASE_VERSION="0.1.0",
+                   RELEASE_TAG=self.tag, RELEASE_COMMIT=self.commit)
+        command = ["bash", str(ROOT / ".github/scripts/release-package.sh")]
+        result = subprocess.run(command, cwd=self.repo, env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(self.record()["isDraft"])
+        builder.write_text('''#!/usr/bin/env python3
+from pathlib import Path
+import hashlib
+import os
+root = Path("dist")
+binary = root / "sweet_linux_amd64_v1/sweet"
+binary.parent.mkdir(parents=True, exist_ok=True)
+binary.write_text('#!/bin/sh\\necho "sweet ' + os.environ["SWEET_RELEASE_VERSION"] + '"\\n')
+binary.chmod(0o755)
+checksums = []
+for name in ("artifact.tar.gz", "artifact.zip"):
+    (root / name).write_bytes(b"fixture")
+    checksums.append(hashlib.sha256(b"fixture").hexdigest() + "  " + name)
+(root / "checksums.txt").write_text("\\n".join(checksums) + "\\n")
+''')
+        result = subprocess.run(command, cwd=self.repo, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.record()["isDraft"])
+        self.assertEqual(len(self.record()["assets"]), 3)
+        count = len(self.mutations())
+        builder.write_text("#!/bin/sh\nexit 99\n")
+        result = subprocess.run(command, cwd=self.repo, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.mutations()), count)
+
 
 if __name__ == "__main__":
     unittest.main()

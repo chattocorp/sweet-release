@@ -1,16 +1,19 @@
 # CLI publishing
 
-After drafts are prepared, CI calls `.github/workflows/publish-cli.yml`
-for each CLI release in the plan. Only `apps/sweet` and historical
+After checks pass, CI calls `.github/workflows/release.yml` with
+`release-command: bash .github/scripts/release-package.sh`. The workflow pushes
+tags and runs that command for each planned release at its exact commit.
+The script owns draft creation, asset uploads, and publication. Only `apps/sweet` and historical
 `pkg/sweet` and `pkg/cli`
 releases build binaries; other packages publish GitHub Release notes without assets.
-The shared release workflow creates drafts for all planned package releases.
-Each job checks out the exact tag commit and verifies it against the planner's
+The shared workflow does not create GitHub Releases itself.
+Each job checks out the exact release commit and verifies it against the planner's
 commit. Jobs for the same tag are serialized. Publishing failures leave tags
 intact; rerunning CI retries publishing, including tags that already exist.
 
-The workflow keeps its own build configuration and script when checking out an
-older tag. It selects `apps/sweet/go.mod` for current source,
+Normal release commands use scripts at the release commit. The manual
+`publish-cli.yml` workflow retains its current build configuration and scripts
+when checking out an older tag, then calls the same release script. It selects `apps/sweet/go.mod` for current source,
 `pkg/sweet/go.mod` for the previous unified layout, root `go.mod`
 for the intermediate layout, and `pkg/cli/go.mod` for historical source after
 checkout. The retained check script runs tests and vet for each layout. The tag
@@ -44,10 +47,11 @@ Explicit packages need no repository configuration. Publishing
 uses the shared action's current metadata binary to read the tagged changelog, so older source
 tags do not need to support this command.
 
-`actions/github-release` first prepares a draft from the package metadata at the
-verified tag commit. Downstream build jobs use the lightweight `status` phase
-instead of regenerating draft notes. Manual dispatch prepares a draft only if
-one is missing. The build script calls the same state helper before building and
+The repository script uses the `actions/github-release` helper to check state,
+skip published releases, and prepare a draft from the package metadata at the
+verified tag commit. Command jobs install pinned GoReleaser with `go install` if
+it is not already available; manual jobs install it with the GoReleaser action.
+The build script calls the same state helper before building and
 again before uploading, and refuses to upload without an existing draft.
 The action's publish phase runs only after all builds and uploads succeed. It
 requires only the tag and commit; it reads prerelease status from GitHub. Remote
@@ -56,7 +60,7 @@ cannot silently pass validation using a stale local tag.
 A retry replaces assets in an unfinished draft; an already published release is
 left unchanged. The `published` output skips rebuilding on retries. API errors
 stop the job. Prerelease versions produce GitHub
-prereleases. After publishing, a separate job sets GitHub's Latest designation to
+prereleases. After the release workflow succeeds, a separate job sets GitHub's Latest designation to
 the highest published stable CLI version. It compares semantic versions across
 `apps/sweet/v`, `pkg/sweet/v`, and `pkg/cli/v` tags. Drafts, prereleases, and other
 packages are excluded. Equal versions prefer the current package prefix, then
@@ -66,7 +70,8 @@ and equal-version tags within a prefix use lexical order as a deterministic tie-
 Promotion jobs share a repository-wide concurrency group and read releases only
 after acquiring it. Each job reconciles all published CLI releases, so publishing
 an older tag cannot displace a newer stable version. Promotion also runs when the
-publisher skips an existing release. If promotion fails, rerun the release workflow;
+publisher skips an existing release. A partial release failure delays promotion
+until a successful retry. If promotion fails, rerun the release workflow;
 it retries promotion without rebuilding or replacing published assets.
 
 Install the tools with `mise install`, then run these commands from the root:

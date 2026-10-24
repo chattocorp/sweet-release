@@ -5,7 +5,7 @@ It lists packages on current `main` with `sweet status --json`, then uses indepe
 checkouts of that commit to run `sweet bump` and verify the changed files. It uses
 `peter-evans/create-pull-request` to create or update PRs into `main`.
 The caller `.github/workflows/prepare-releases.yml` delegates to
-`.github/workflows/release-pr.yml`. It uses `sweet-version: source` to
+`.github/workflows/bump.yml`. It uses `sweet-version: source` to
 exercise unreleased CLI changes; external callers install a binary release.
 Configure PR policy in the caller:
 

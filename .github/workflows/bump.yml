@@ -1,4 +1,4 @@
-name: Release PRs
+name: Bump
 
 on:
   workflow_call:

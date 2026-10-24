@@ -4,10 +4,11 @@ On pushes to `main`, CI calls `.github/workflows/release.yml` after all checks
 succeed, with
 `sweet-version: source`. The shared workflow checks out the exact pushed SHA,
 fetches tags, and runs the tag planner through `.github/scripts/tag-releases.sh`.
-It returns all package releases and prepares a draft GitHub Release for each one.
-CI selects CLI packages for our binary builder and publishes other
-packages' release notes without assets. External callers publish immediately by
-default, or set `draft: true` and upload assets before the shared publication step.
+It returns all package releases and runs the configured `release-command` for each
+one at its exact commit. Our command, `.github/scripts/release-package.sh`, manages
+GitHub Releases and selects CLI packages for binary builds. External callers can
+omit the command for tags only, or set `push-tags: false` to plan releases without
+creating tags and let their command handle all publication policy.
 Pull requests, other branches,
 and manual CI dispatches do not create tags. Each main push has its own concurrency
 group so a later push cannot cancel a range before tagging. Separate runs can push

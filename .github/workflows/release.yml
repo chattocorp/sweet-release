@@ -15,20 +15,28 @@ on:
         description: Sweet release tag, latest, or source for development.
         type: string
         default: latest
-      draft:
-        description: Leave releases as drafts for downstream asset uploads.
+      push-tags:
+        description: Create and push package tags before running release commands.
         type: boolean
-        default: false
+        default: true
+      release-command:
+        description: Bash command to run at each released package's commit, from the repository root.
+        type: string
+        default: ''
+    secrets:
+      release-token:
+        description: Optional token for tag pushes and release commands; defaults to GITHUB_TOKEN.
+        required: false
     outputs:
       releases:
         description: JSON array of package, version, tag, and commit, including matching existing tags on retries.
-        value: ${{ jobs.tag.outputs.releases }}
+        value: ${{ jobs.plan.outputs.releases }}
 
-permissions:
-  contents: write
+# Inherit caller permissions: plan-only runs can use contents: read.
+# Tag pushes and publication commands require the caller to grant write access.
 
 jobs:
-  tag:
+  plan:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -39,31 +47,33 @@ jobs:
         with:
           ref: ${{ inputs.head }}
           fetch-depth: 0
+          token: ${{ secrets.release-token || github.token }}
       - id: tooling
         uses: $/actions/tooling
         with:
           sweet-version: ${{ inputs.sweet-version }}
-      - name: Create and push release tags
+      - name: Plan releases and optionally push tags
         id: tags
         env:
           BASE: ${{ inputs.base }}
           HEAD: ${{ inputs.head }}
           SCRIPTS: ${{ steps.tooling.outputs.scripts }}
+          PUSH_TAGS: ${{ inputs.push-tags }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           bash "$SCRIPTS/tag-releases.sh" "$(command -v sweet)" "$BASE" "$HEAD"
 
-  github-releases:
-    needs: tag
-    if: needs.tag.outputs.releases != '[]'
+  release:
+    needs: plan
+    if: inputs.release-command != '' && needs.plan.outputs.releases != '[]'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       max-parallel: 4
       matrix:
-        include: ${{ fromJSON(needs.tag.outputs.releases) }}
+        include: ${{ fromJSON(needs.plan.outputs.releases) }}
     concurrency:
       group: sweet-github-release-${{ matrix.tag }}
       cancel-in-progress: false
@@ -72,17 +82,19 @@ jobs:
         with:
           ref: ${{ matrix.commit }}
           fetch-depth: 0
-      - uses: $/actions/github-release
+          token: ${{ secrets.release-token || github.token }}
+      - id: tooling
+        uses: $/actions/tooling
         with:
-          phase: draft
-          package: ${{ matrix.package }}
-          version: ${{ matrix.version }}
-          tag: ${{ matrix.tag }}
-          commit: ${{ matrix.commit }}
-          sweet-version: ${{ needs.tag.outputs.sweet-tag }}
-      - if: ${{ !inputs.draft }}
-        uses: $/actions/github-release
-        with:
-          phase: publish
-          tag: ${{ matrix.tag }}
-          commit: ${{ matrix.commit }}
+          sweet-version: ${{ needs.plan.outputs.sweet-tag }}
+      - name: Run package release command
+        env:
+          GH_TOKEN: ${{ secrets.release-token || github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_PACKAGE: ${{ matrix.package }}
+          RELEASE_VERSION: ${{ matrix.version }}
+          RELEASE_TAG: ${{ matrix.tag }}
+          RELEASE_COMMIT: ${{ matrix.commit }}
+          RELEASE_COMMAND: ${{ inputs.release-command }}
+          SCRIPTS: ${{ steps.tooling.outputs.scripts }}
+        run: bash "$SCRIPTS/release-command.sh"

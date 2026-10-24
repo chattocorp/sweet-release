@@ -16,6 +16,34 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  release-contract:
+    name: Release contract (${{ matrix.mode }})
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: plan-only
+            command: ''
+          - mode: command
+            command: |
+              test "$RELEASE_PACKAGE" = apps/sweet
+              test "$RELEASE_VERSION" = 0.2.0
+              test -n "$RELEASE_TAG"
+              test "$RELEASE_COMMIT" = 0c591e471bac87293929f0e9a1edcfc3f8a8b918
+              test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+              sweet status --json
+    uses: ./.github/workflows/release.yml
+    with:
+      # Historical version bump: exercise real planning and exact-commit commands
+      # without permission to push tags or publish anything.
+      base: 9316cc87dfcac8b7cbeb2e407caee4279731e405
+      head: 0c591e471bac87293929f0e9a1edcfc3f8a8b918
+      sweet-version: source
+      push-tags: false
+      release-command: ${{ matrix.command }}
+
   release-actions:
     name: Shared release actions (${{ matrix.version }})
     runs-on: ubuntu-latest
@@ -129,7 +157,7 @@ jobs:
       - run: pnpm --dir apps/docs run build
 
   release:
-    needs: [check, docs, setup-action, release-actions]
+    needs: [check, docs, setup-action, release-actions, release-contract]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
@@ -138,58 +166,22 @@ jobs:
       base: ${{ github.event.before }}
       head: ${{ github.sha }}
       sweet-version: source
-      draft: true
+      release-command: bash .github/scripts/release-package.sh
 
-  select-releases:
+  promote-latest:
     needs: release
+    if: needs.release.outputs.releases != '[]'
     runs-on: ubuntu-latest
-    outputs:
-      cli: ${{ steps.select.outputs.cli }}
-      notes: ${{ steps.select.outputs.notes }}
-    steps:
-      - id: select
-        env:
-          RELEASES: ${{ needs.release.outputs.releases }}
-        run: |
-          cli=$(jq -c '[.[] | select(.package == "apps/sweet" or .package == "pkg/sweet" or .package == "pkg/cli")]' <<< "$RELEASES")
-          notes=$(jq -c '[.[] | select(.package != "apps/sweet" and .package != "pkg/sweet" and .package != "pkg/cli")]' <<< "$RELEASES")
-          echo "cli=$cli" >> "$GITHUB_OUTPUT"
-          echo "notes=$notes" >> "$GITHUB_OUTPUT"
-
-  publish-notes:
-    needs: select-releases
-    if: needs.select-releases.outputs.notes != '[]'
-    runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.select-releases.outputs.notes) }}
     concurrency:
-      group: sweet-github-release-${{ matrix.tag }}
+      group: promote-latest-cli
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ matrix.commit }}
-          fetch-depth: 0
-      - uses: $/actions/github-release
-        with:
-          phase: publish
-          tag: ${{ matrix.tag }}
-          commit: ${{ matrix.commit }}
-
-  publish-cli:
-    needs: select-releases
-    if: needs.select-releases.outputs.cli != '[]'
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.select-releases.outputs.cli) }}
-    uses: ./.github/workflows/publish-cli.yml
-    with:
-      tag: ${{ matrix.tag }}
-      commit: ${{ matrix.commit }}
+      - name: Promote highest stable CLI release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 .github/scripts/promote-latest.py

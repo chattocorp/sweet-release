@@ -1,14 +1,6 @@
 name: Publish CLI
 
 on:
-  workflow_call:
-    inputs:
-      tag:
-        required: true
-        type: string
-      commit:
-        required: true
-        type: string
   workflow_dispatch:
     inputs:
       tag:
@@ -35,19 +27,17 @@ jobs:
       # Use this workflow's tooling even when publishing an older source tag.
       - name: Preserve release tooling
         run: |
-          cp .goreleaser.yml "$RUNNER_TEMP/goreleaser.yml"
-          cp .github/scripts/publish-cli.sh "$RUNNER_TEMP/publish-cli.sh"
-          cp .github/scripts/check-go.sh "$RUNNER_TEMP/check-go.sh"
-          cp actions/github-release/release.py "$RUNNER_TEMP/sweet-release.py"
+          mkdir -p "$RUNNER_TEMP/release-tooling/.github" "$RUNNER_TEMP/release-tooling/actions"
+          cp .goreleaser.yml "$RUNNER_TEMP/release-tooling/"
+          cp -R .github/scripts "$RUNNER_TEMP/release-tooling/.github/"
+          cp -R actions/github-release "$RUNNER_TEMP/release-tooling/actions/"
       - name: Check out release source
         id: source
         env:
           TAG: ${{ inputs.tag }}
-          EXPECTED_COMMIT: ${{ inputs.commit }}
         run: |
           [[ "$TAG" == sweet@* || "$TAG" == apps/sweet/v* || "$TAG" == pkg/sweet/v* || "$TAG" == pkg/cli/v* ]]
           commit=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
-          [[ -z "$EXPECTED_COMMIT" || "$commit" == "$EXPECTED_COMMIT" ]]
           git checkout --detach "$commit"
           case "$TAG" in
             sweet@*) package=apps/sweet; version=${TAG#sweet@} ;;
@@ -63,23 +53,16 @@ jobs:
           phase: status
           tag: ${{ inputs.tag }}
           commit: ${{ steps.source.outputs.commit }}
-      # Normal CI already created the draft. Manual dispatch can prepare a
-      # missing release without repeating work for existing drafts or publications.
-      - name: Prepare missing GitHub Release
-        if: steps.status.outputs.state == 'missing'
-        uses: $/actions/github-release
+      - name: Install release metadata tooling
+        if: steps.status.outputs.published != 'true'
+        uses: $/actions/tooling
         with:
-          phase: draft
-          package: ${{ steps.source.outputs.package }}
-          version: ${{ steps.source.outputs.version }}
-          tag: ${{ inputs.tag }}
-          commit: ${{ steps.source.outputs.commit }}
           sweet-version: source
       - name: Select release Go module
         if: steps.status.outputs.published != 'true'
         id: release-go
         run: |
-          echo "version-file=$(bash "$RUNNER_TEMP/check-go.sh" version-file)" >> "$GITHUB_OUTPUT"
+          echo "version-file=$(bash "$RUNNER_TEMP/release-tooling/.github/scripts/check-go.sh" version-file)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v7
         if: steps.status.outputs.published != 'true'
         with:
@@ -95,21 +78,16 @@ jobs:
         with:
           version: v2.18.2
           install-only: true
-      - name: Build and upload CLI assets
+      - name: Release package
         if: steps.status.outputs.published != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ inputs.tag }}
-          SWEET_GO_CHECK: ${{ runner.temp }}/check-go.sh
-          SWEET_RELEASE_TOOL: ${{ runner.temp }}/sweet-release.py
-        run: bash "$RUNNER_TEMP/publish-cli.sh" "$TAG" "$RUNNER_TEMP/goreleaser.yml"
-      - name: Publish GitHub Release
-        uses: $/actions/github-release
-        with:
-          phase: publish
-          tag: ${{ inputs.tag }}
-          commit: ${{ steps.source.outputs.commit }}
+          RELEASE_PACKAGE: ${{ steps.source.outputs.package }}
+          RELEASE_VERSION: ${{ steps.source.outputs.version }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: bash "$RUNNER_TEMP/release-tooling/.github/scripts/release-package.sh"
 
   promote-latest:
     needs: release

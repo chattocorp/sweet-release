@@ -109,6 +109,16 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 			}
 		}
 	}
+	// Planning without tags must retain the release matrix and mutate no refs.
+	t.Setenv("PUSH_TAGS", "false")
+	invoke(base, head, false)
+	if got := git(root, "tag", "--list"); got != "" {
+		t.Fatalf("planning created local tags: %s", got)
+	}
+	if got := git(remote, "tag", "--list"); got != "" {
+		t.Fatalf("planning pushed tags: %s", got)
+	}
+	t.Setenv("PUSH_TAGS", "true")
 	invoke(base, head, false)
 	for _, name := range []string{"v0.1.0", "api@0.1.0"} {
 		if got := git(remote, "rev-parse", "refs/tags/"+name+"^{commit}"); got != head {
