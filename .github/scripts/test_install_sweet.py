@@ -8,7 +8,7 @@ import unittest
 import zipfile
 
 
-spec = importlib.util.spec_from_file_location("installer", Path(__file__).with_name("install.py"))
+spec = importlib.util.spec_from_file_location("installer", Path(__file__).with_name("install-sweet.py"))
 installer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(installer)
 

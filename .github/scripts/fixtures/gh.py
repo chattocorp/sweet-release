@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stateful GitHub CLI transport for integration tests; never uses the network."""
+"""Stateful GitHub CLI transport for release tests; never uses the network."""
 
 import json
 import os

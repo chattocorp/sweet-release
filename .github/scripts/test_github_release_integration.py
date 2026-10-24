@@ -10,8 +10,8 @@ import tempfile
 import unittest
 
 
-ACTION = Path(__file__).resolve().parent
-ROOT = ACTION.parents[1]
+SCRIPTS = Path(__file__).resolve().parent
+ROOT = SCRIPTS.parents[1]
 
 
 class ReleaseIntegrationTests(unittest.TestCase):
@@ -33,11 +33,11 @@ class ReleaseIntegrationTests(unittest.TestCase):
         self.remote = self.root / "remote.git"
         self.bin = self.root / "bin"
         self.bin.mkdir()
-        shutil.copyfile(ACTION / "fixtures/gh.py", self.bin / "gh")
+        shutil.copyfile(SCRIPTS / "fixtures/gh.py", self.bin / "gh")
         (self.bin / "gh").chmod(0o755)
         self.env = dict(os.environ, PATH=os.pathsep.join([str(self.bin), self.build.name, os.environ["PATH"]]),
                         GH_REPO="example/consumer", FAKE_GH_STATE=str(self.root / "release.json"),
-                        FAKE_GH_LOG=str(self.root / "gh.log"), GITHUB_OUTPUT=str(self.root / "outputs"))
+                        FAKE_GH_LOG=str(self.root / "gh.log"))
         subprocess.run(["git", "init", "--bare", str(self.remote)], check=True, capture_output=True)
         self.git("init", "--initial-branch=main")
         self.git("config", "user.name", "Test")
@@ -67,7 +67,7 @@ class ReleaseIntegrationTests(unittest.TestCase):
         env = dict(self.env, RELEASE_PHASE=phase, RELEASE_TAG=self.tag, RELEASE_COMMIT=self.commit, **extra)
         if phase == "draft":
             env.update(RELEASE_PACKAGE=".", RELEASE_VERSION="0.1.0")
-        result = subprocess.run([sys.executable, str(ACTION / "release.py")], cwd=self.repo,
+        result = subprocess.run([sys.executable, str(SCRIPTS / "github-release.py")], cwd=self.repo,
                                 env=env, text=True, capture_output=True)
         self.assertEqual(result.returncode == 0, success, result.stderr)
         return result

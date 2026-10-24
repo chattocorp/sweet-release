@@ -49,7 +49,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.release-token || github.token }}
       - id: tooling
-        uses: $/actions/tooling
+        uses: $/.github/actions/bootstrap
         with:
           sweet-version: ${{ inputs.sweet-version }}
       - name: Plan releases and optionally push tags
@@ -84,7 +84,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.release-token || github.token }}
       - id: tooling
-        uses: $/actions/tooling
+        uses: $/.github/actions/bootstrap
         with:
           sweet-version: ${{ needs.plan.outputs.sweet-tag }}
       - name: Run package release command

@@ -1,4 +1,4 @@
-"""Install a verified release archive without requiring a Go toolchain."""
+"""Internal workflow bootstrap: install a verified Sweet release archive."""
 
 import hashlib
 import json

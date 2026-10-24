@@ -153,49 +153,6 @@ Rerun the original workflow to retry its original range. Existing tags do not
 suppress commands: **make your script safe to repeat**. Sweet cannot guarantee
 exactly-once publication for arbitrary commands.
 
-## Optional actions
-
-The two workflows are the public process. These actions are also available for
-repositories that compose their own jobs.
-
-### Install Sweet
-
-```yaml
-- uses: chattocorp/sweet-release/actions/setup@main
-  with:
-    version: apps/sweet/v0.2.0
-- run: sweet status --json
-```
-
-`version` accepts a release tag or `latest`. The action resolves the release,
-downloads the archive and checksums, verifies SHA-256 and the executable's version,
-then adds it to `PATH`. Outputs are `version` and `tag`. Linux, macOS, and Windows
-are supported on amd64 and arm64. Bash, Python 3, and GitHub CLI are required.
-`token` defaults to `github.token`; no checkout is needed. Checksums detect damaged
-downloads; they are not an independent signature.
-
-### Manage a GitHub Release
-
-Use `chattocorp/sweet-release/actions/github-release@main` in your own jobs to manage
-an existing tag. Every phase requires `tag` and a full `commit` SHA. Check out that
-commit with full history and an `origin` remote pointing to the target repository.
-
-| Phase | Behavior | Additional inputs |
-| --- | --- | --- |
-| `status` | Return `missing`, `draft`, or `published` without changing anything. | None |
-| `draft` | Create or refresh draft notes from the package changelog. | `package`, `version`; optional `sweet-version` |
-| `publish` | Publish an existing draft. | Optional `latest` |
-
-Outputs are `state` and `published`. Published releases remain unchanged on retries.
-API errors fail the action. Checkout, local tag, and remote tag must match the
-expected commit; remote tags are rechecked before mutations. These checks do not
-lock Git refs: protect release tags against deletion and force updates.
-
-Upload assets between draft creation and publication. Serialize the full sequence
-with `sweet-github-release-<tag>`. The action defaults to `latest: 'false'`; explicitly
-set it to `'true'` to designate a stable release as Latest. Prereleases cannot be
-Latest. Repository-wide Latest selection is the caller's policy.
-
 ## Sweet's own release policy
 
 This repository calls `bump.yml` from `prepare-releases.yml` and `release.yml` from
@@ -205,7 +162,11 @@ option builds from the automation revision and requires Go.
 Our `release-command` runs `.github/scripts/release-package.sh`. It prepares a GitHub
 Release draft, builds and uploads CLI assets with GoReleaser when applicable, and
 publishes. Other packages publish notes only. Published retries skip the build.
-The manual `publish-cli.yml` workflow uses the same script with retained tooling
-for historical tags. After a successful release run, a serialized job promotes the
+After a successful release run, a serialized job promotes the
 highest stable CLI release to Latest. Rerun a failed release run to finish publication
 and promotion.
+
+The workflows share one internal bootstrap action under `.github/actions/`, which
+installs Sweet and locates the internal scripts under `.github/scripts/`. Binary
+downloads are checked against SHA-256 checksums and the executable's version.
+These helpers are implementation details; consumers call `bump.yml` and `release.yml`.

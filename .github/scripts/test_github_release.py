@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 
-spec = importlib.util.spec_from_file_location("release", Path(__file__).with_name("release.py"))
+spec = importlib.util.spec_from_file_location("release", Path(__file__).with_name("github-release.py"))
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 COMMIT = "a" * 40

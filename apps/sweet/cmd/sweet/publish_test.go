@@ -18,7 +18,7 @@ func TestCLIPublishing(t *testing.T) {
 	}
 	_, source, _, _ := runtime.Caller(0)
 	script := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/publish-cli.sh")
-	releaseTool := filepath.Join(filepath.Dir(source), "../../../../actions/github-release/release.py")
+	releaseTool := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/github-release.py")
 	for _, prefix := range []string{"sweet@", "apps/sweet/v", "pkg/sweet/v", "pkg/cli/v"} {
 		releasePackage := strings.TrimSuffix(prefix, "/v")
 		if prefix == "sweet@" {

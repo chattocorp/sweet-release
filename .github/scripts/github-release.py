@@ -1,4 +1,4 @@
-"""GitHub release lifecycle; build systems only upload assets to the draft."""
+"""Internal GitHub release lifecycle for this repository's release policy."""
 
 import json
 import os
@@ -101,8 +101,7 @@ def main():
     state = manage(os.environ["RELEASE_PHASE"], os.environ["RELEASE_TAG"],
                    os.environ["RELEASE_COMMIT"], os.environ.get("RELEASE_PACKAGE", ""),
                    os.environ.get("RELEASE_VERSION", ""), os.environ.get("RELEASE_LATEST", "false"))
-    with open(os.environ["GITHUB_OUTPUT"], "a") as target:
-        target.write(f"state={state}\npublished={str(state == 'published').lower()}\n")
+    print(state)
 
 
 if __name__ == "__main__":

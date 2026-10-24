@@ -44,14 +44,10 @@ jobs:
       push-tags: false
       release-command: ${{ matrix.command }}
 
-  release-actions:
-    name: Shared release actions (${{ matrix.version }})
+  release-policy:
+    name: Published release retry
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        version: [source, apps/sweet/v0.2.0]
     # This exercises published-release retries without permission to mutate releases.
     permissions:
       contents: read
@@ -62,35 +58,23 @@ jobs:
           fetch-depth: 0
       - id: source
         run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - uses: $/actions/github-release
-        id: status
+      - id: bootstrap
+        uses: $/.github/actions/bootstrap
         with:
-          phase: status
-          tag: apps/sweet/v0.2.0
-          commit: ${{ steps.source.outputs.commit }}
-      - uses: $/actions/github-release
-        id: draft
-        with:
-          phase: draft
-          package: apps/sweet
-          version: 0.2.0
-          tag: apps/sweet/v0.2.0
-          commit: ${{ steps.source.outputs.commit }}
-          sweet-version: ${{ matrix.version }}
-      - uses: $/actions/github-release
-        id: publish
-        with:
-          phase: publish
-          tag: apps/sweet/v0.2.0
-          commit: ${{ steps.source.outputs.commit }}
+          install: 'false'
       - name: Verify published release was preserved
         env:
-          DRAFT_PUBLISHED: ${{ steps.draft.outputs.published }}
-          STATE: ${{ steps.status.outputs.state }}
-          PUBLISHED: ${{ steps.publish.outputs.published }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SCRIPTS: ${{ steps.bootstrap.outputs.scripts }}
+          RELEASE_PACKAGE: apps/sweet
+          RELEASE_VERSION: 0.2.0
+          RELEASE_TAG: apps/sweet/v0.2.0
+          RELEASE_COMMIT: ${{ steps.source.outputs.commit }}
         run: |
-          [[ "$STATE" == published && "$DRAFT_PUBLISHED" == true && "$PUBLISHED" == true ]]
-          sweet --version
+          state=$(python3 "$SCRIPTS/github-release.py" status "$RELEASE_TAG" "$RELEASE_COMMIT")
+          [[ "$state" == published ]]
+          bash "$SCRIPTS/release-package.sh"
 
   setup-action:
     name: Install released CLI (${{ matrix.os }})
@@ -102,9 +86,9 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
-      - uses: ./actions/setup
+      - uses: ./.github/actions/bootstrap
         with:
-          version: apps/sweet/v0.2.0
+          sweet-version: apps/sweet/v0.2.0
       - shell: bash
         run: sweet --version
 
@@ -129,12 +113,8 @@ jobs:
         run: go test -race ./apps/sweet/...
       - name: Run static checks
         run: go vet ./apps/sweet/...
-      - name: Test release promotion
+      - name: Test workflow scripts
         run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
-      - name: Test binary installer
-        run: python3 -m unittest discover -s actions/setup -p 'test_*.py'
-      - name: Test GitHub Release lifecycle
-        run: python3 -m unittest discover -s actions/github-release -p 'test_*.py'
       - name: Build CLI
         run: go build -o bin/sweet ./apps/sweet/cmd/sweet
 
@@ -157,7 +137,7 @@ jobs:
       - run: pnpm --dir apps/docs run build
 
   release:
-    needs: [check, docs, setup-action, release-actions, release-contract]
+    needs: [check, docs, setup-action, release-policy, release-contract]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write

@@ -11,23 +11,13 @@ Each job checks out the exact release commit and verifies it against the planner
 commit. Jobs for the same tag are serialized. Publishing failures leave tags
 intact; rerunning CI retries publishing, including tags that already exist.
 
-Normal release commands use scripts at the release commit. The manual
-`publish-cli.yml` workflow retains its current build configuration and scripts
-when checking out an older tag, then calls the same release script. It selects `apps/sweet/go.mod` for current source,
-`pkg/sweet/go.mod` for the previous unified layout, root `go.mod`
-for the intermediate layout, and `pkg/cli/go.mod` for historical source after
-checkout. The retained check script runs tests and vet for each layout. The tag
-selects the build directory, manifest, and changelog: `apps/sweet` for new tags,
-and `pkg/sweet` or `pkg/cli` for historical tags. You can publish or retry
-an existing CLI tag from main manually:
-
-```sh
-gh workflow run publish-cli.yml --ref main -f tag=apps/sweet/v0.1.0
-```
+Release commands use scripts at the release commit. Retry a failed release by
+rerunning its original CI run; this retains the original commit range. There is
+no separate workflow for publishing an arbitrary historical tag.
 
 GoReleaser's free edition builds archives in snapshot mode with an explicit
 release version, avoiding its Pro-only support for prefixed tags. The build script
-uploads artifacts to the existing draft. `actions/github-release` owns draft
+uploads artifacts to the existing draft. `.github/scripts/github-release.py` owns draft
 creation, release notes, and final publication. No extra
 tags are created. The job checks the Linux binary's version and archive checksums
 before upload. Release notes come from that version's CLI changelog section.
@@ -44,21 +34,21 @@ It excludes the version heading and earlier history,
 preserves the body, and ignores headings inside fenced code blocks. A missing
 version, missing changelog, or changelog without released versions is an error.
 Explicit packages need no repository configuration. Publishing
-uses the shared action's current metadata binary to read the tagged changelog, so older source
+uses the workflow's installed Sweet binary to read the tagged changelog, so older source
 tags do not need to support this command.
 
-The repository script uses the `actions/github-release` helper to check state,
+The repository script uses the internal `github-release.py` helper to check state,
 skip published releases, and prepare a draft from the package metadata at the
 verified tag commit. Command jobs install pinned GoReleaser with `go install` if
-it is not already available; manual jobs install it with the GoReleaser action.
+it is not already available.
 The build script calls the same state helper before building and
 again before uploading, and refuses to upload without an existing draft.
-The action's publish phase runs only after all builds and uploads succeed. It
+The helper's publish phase runs only after all builds and uploads succeed. It
 requires only the tag and commit; it reads prerelease status from GitHub. Remote
 tag commits are checked before release mutations, so a moved/deleted remote tag
 cannot silently pass validation using a stale local tag.
 A retry replaces assets in an unfinished draft; an already published release is
-left unchanged. The `published` output skips rebuilding on retries. API errors
+left unchanged. The script checks for published releases before building. API errors
 stop the job. Prerelease versions produce GitHub
 prereleases. After the release workflow succeeds, a separate job sets GitHub's Latest designation to
 the highest published stable CLI version. It compares semantic versions across
