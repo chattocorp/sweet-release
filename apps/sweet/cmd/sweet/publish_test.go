@@ -34,6 +34,7 @@ func TestCLIPublishing(t *testing.T) {
 			{"API failure", "missing", "api", "0.1.0", true},
 			{"build failure", "draft", "build", "0.1.0", true},
 			{"checksum failure", "draft", "checksum", "0.1.0", true},
+			{"wrong binary version", "draft", "binary-version", "0.1.0", true},
 			{"upload failure", "draft", "upload", "0.1.0", true},
 			{"remote tag moved during build", "draft", "tag-moved", "0.1.0", true},
 			{"published during build", "draft", "published-after-build", "0.1.0", true},
@@ -73,6 +74,7 @@ shift
 grep -qx "    dir: $TEST_PACKAGE" "$1" || exit 1
 [ "$TEST_FAILURE" != build ] || exit 1
 mkdir -p dist/sweet_linux_amd64_v1
+if [ "$TEST_FAILURE" = binary-version ]; then SWEET_RELEASE_VERSION=0.0.0; fi
 printf '#!/bin/sh\necho "sweet %s"\n' "$SWEET_RELEASE_VERSION" > dist/sweet_linux_amd64_v1/sweet
 chmod +x dist/sweet_linux_amd64_v1/sweet
 touch dist/test.tar.gz dist/test.zip dist/checksums.txt
