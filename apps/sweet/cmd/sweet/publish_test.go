@@ -13,18 +13,12 @@ func TestCLIPublishing(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("publishing uses Bash")
 	}
-	if _, err := exec.LookPath("jq"); err != nil {
-		t.Skip("requires jq")
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("requires python3")
 	}
 	_, source, _, _ := runtime.Caller(0)
 	script := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/publish-cli.sh")
-	metadata := filepath.Join(t.TempDir(), "sweet-metadata")
-	build := exec.Command("go", "build", "-o", metadata, ".")
-	build.Dir = filepath.Dir(source)
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build metadata: %v: %s", err, out)
-	}
-	t.Setenv("TEST_METADATA", metadata)
+	releaseTool := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/github-release.py")
 	for _, prefix := range []string{"sweet@", "apps/sweet/v", "pkg/sweet/v", "pkg/cli/v"} {
 		releasePackage := strings.TrimSuffix(prefix, "/v")
 		if prefix == "sweet@" {
@@ -34,13 +28,18 @@ func TestCLIPublishing(t *testing.T) {
 			name, state, failure, version string
 			wantFailure                   bool
 		}{
-			{"new", "missing", "", "0.1.0", false},
+			{"missing draft", "missing", "", "0.1.0", true},
 			{"retry draft", "draft", "", "0.1.0", false},
 			{"published", "published", "", "0.1.0", false},
 			{"API failure", "missing", "api", "0.1.0", true},
-			{"build failure", "missing", "build", "0.1.0", true},
-			{"upload failure", "missing", "upload", "0.1.0", true},
-			{"prerelease", "missing", "", "0.2.0-rc.1", false},
+			{"build failure", "draft", "build", "0.1.0", true},
+			{"checksum failure", "draft", "checksum", "0.1.0", true},
+			{"wrong binary version", "draft", "binary-version", "0.1.0", true},
+			{"upload failure", "draft", "upload", "0.1.0", true},
+			{"remote tag moved during build", "draft", "tag-moved", "0.1.0", true},
+			{"published during build", "draft", "published-after-build", "0.1.0", true},
+			{"API access lost during build", "draft", "api-after-build", "0.1.0", true},
+			{"prerelease", "draft", "", "0.2.0-rc.1", false},
 		} {
 			t.Run(prefix+"/"+tc.name, func(t *testing.T) {
 				root := t.TempDir()
@@ -54,11 +53,20 @@ func TestCLIPublishing(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				write(releasePackage+"/CHANGELOG.md", "# Changelog\n\n## "+tc.version+"\n\n- New feature.\n\n## 0.0.1\n\n- Old feature.\n")
-				write(releasePackage+"/.sweet.yml", "version: "+tc.version+"\n")
 				write("config.yml", "builds:\n  - id: sweet\n    dir: apps/sweet\n")
-				write("bin/git", "#!/bin/sh\necho commit\n")
-				write("bin/sweet", "#!/bin/sh\nif [ \"$1\" = changelog ]; then exec \"$TEST_METADATA\" \"$@\"; fi\nprintf '%s\\n' '[{\"path\":\""+releasePackage+"\",\"name\":\"Sweet Release\"}]'\n")
+				write("bin/git", `#!/bin/sh
+if [ "$1" = ls-remote ]; then
+  commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  if [ "$TEST_FAILURE" = tag-moved ] && [ -f "$TEST_BUILT" ]; then
+    commit=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  fi
+  printf '%s\trefs/tags/%s\n' "$commit" "$TEST_TAG"
+elif [ "$1" = check-ref-format ]; then
+  exit 0
+else
+  echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+fi
+`)
 				write("bin/goreleaser", `#!/bin/sh
 echo build >> "$TEST_LOG"
 while [ "$1" != --config ]; do shift; done
@@ -66,59 +74,52 @@ shift
 grep -qx "    dir: $TEST_PACKAGE" "$1" || exit 1
 [ "$TEST_FAILURE" != build ] || exit 1
 mkdir -p dist/sweet_linux_amd64_v1
+if [ "$TEST_FAILURE" = binary-version ]; then SWEET_RELEASE_VERSION=0.0.0; fi
 printf '#!/bin/sh\necho "sweet %s"\n' "$SWEET_RELEASE_VERSION" > dist/sweet_linux_amd64_v1/sweet
 chmod +x dist/sweet_linux_amd64_v1/sweet
 touch dist/test.tar.gz dist/test.zip dist/checksums.txt
+touch "$TEST_BUILT"
 `)
-				write("bin/sha256sum", "#!/bin/sh\nexit 0\n")
+				write("bin/sha256sum", "#!/bin/sh\n[ \"$TEST_FAILURE\" != checksum ]\n")
 				write("bin/gh", `#!/bin/sh
 echo "$*" >> "$TEST_LOG"
 if [ "$1" = api ]; then
   [ "$TEST_FAILURE" != api ] || exit 1
+  if [ -f "$TEST_BUILT" ]; then
+    [ "$TEST_FAILURE" != api-after-build ] || exit 1
+    if [ "$TEST_FAILURE" = published-after-build ]; then TEST_STATE=published; fi
+  fi
   case "$TEST_STATE" in
-    draft) printf '{"tag_name":"%s","draft":true}\n' "$TEST_TAG" ;;
-    published) printf '{"tag_name":"%s","draft":false}\n' "$TEST_TAG" ;;
+    draft) printf '{"data":{"repository":{"release":{"isDraft":true,"isPrerelease":false}}}}\n' ;;
+    published) printf '{"data":{"repository":{"release":{"isDraft":false,"isPrerelease":false}}}}\n' ;;
+    missing) printf '{"data":{"repository":{"release":null}}}\n' ;;
   esac
 fi
 if [ "$2" = upload ] && [ "$TEST_FAILURE" = upload ]; then exit 1; fi
-while [ "$#" -gt 0 ]; do
-  if [ "$1" = --notes-file ]; then cp "$2" "$TEST_NOTES"; fi
-  shift
-done
 `)
 				cmd := exec.Command("bash", script, prefix+tc.version, "config.yml")
 				cmd.Dir = root
-				t.Setenv("SWEET_METADATA", filepath.Join(root, "bin/sweet"))
 				t.Setenv("TEST_PACKAGE", releasePackage)
 				t.Setenv("TEST_TAG", prefix+tc.version)
-				cmd.Env = append(os.Environ(), "PATH="+filepath.Join(root, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"), "TEST_LOG="+filepath.Join(root, "log"), "TEST_NOTES="+filepath.Join(root, "notes"), "TEST_STATE="+tc.state, "TEST_FAILURE="+tc.failure, "TEST_VERSION="+tc.version)
+				t.Setenv("SWEET_RELEASE_TOOL", releaseTool)
+				t.Setenv("GH_REPO", "example/repo")
+				t.Setenv("TEST_BUILT", filepath.Join(root, "built"))
+				cmd.Env = append(os.Environ(), "PATH="+filepath.Join(root, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"), "TEST_LOG="+filepath.Join(root, "log"), "TEST_STATE="+tc.state, "TEST_FAILURE="+tc.failure)
 				out, err := cmd.CombinedOutput()
 				if (err != nil) != tc.wantFailure {
 					t.Fatalf("publish: %v: %s", err, out)
 				}
 				log, _ := os.ReadFile(filepath.Join(root, "log"))
 				text := string(log)
-				published := strings.Contains(text, "release edit")
-				if published != (!tc.wantFailure && tc.state != "published") {
-					t.Fatalf("unexpected publish: %s", text)
+				if strings.Contains(text, "release edit") || strings.Contains(text, "release create") {
+					t.Fatalf("asset builder changed release lifecycle: %s", text)
 				}
-				if tc.state == "published" && strings.Contains(text, "build") {
-					t.Fatalf("rebuilt published release: %s", text)
+				if strings.Contains(text, "build") != (tc.state == "draft") {
+					t.Fatalf("must only build for an existing draft: %s", text)
 				}
-				if tc.state == "draft" && strings.Contains(text, "release create") {
-					t.Fatalf("recreated draft: %s", text)
-				}
-				if published {
-					if !strings.Contains(text, "--title Sweet Release "+tc.version) {
-						t.Fatalf("wrong title: %s", text)
-					}
-					notes, _ := os.ReadFile(filepath.Join(root, "notes"))
-					if !strings.Contains(string(notes), "New feature") || strings.Contains(string(notes), "Old feature") {
-						t.Fatalf("wrong notes: %s", notes)
-					}
-					if strings.Contains(tc.version, "-rc.") && !strings.Contains(text, "--prerelease=true") {
-						t.Fatalf("not a prerelease: %s", text)
-					}
+				wantUpload := tc.state == "draft" && (tc.failure == "" || tc.failure == "upload")
+				if strings.Contains(text, "release upload") != wantUpload {
+					t.Fatalf("unexpected asset upload: %s", text)
 				}
 			})
 		}
@@ -133,7 +134,6 @@ func TestPublishingRejectsOtherPackages(t *testing.T) {
 	script := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/publish-cli.sh")
 	for _, tag := range []string{"pkg/core/v0.2.0", "pkg/docs/v1.0.0", "apps/docs/v1.0.0", "v1.0.0"} {
 		cmd := exec.Command("bash", script, tag, "unused.yml")
-		cmd.Env = append(os.Environ(), "SWEET_METADATA=unused")
 		out, err := cmd.CombinedOutput()
 		if err == nil || !strings.Contains(string(out), "Unsupported release tag") {
 			t.Fatalf("tag %s: %v: %s", tag, err, out)

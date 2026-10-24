@@ -1,0 +1,46 @@
+name: Bootstrap Sweet workflows
+description: Internal helper that locates scripts and installs Sweet for reusable workflows.
+inputs:
+  sweet-version:
+    description: Release tag, latest, or source for development of Sweet itself.
+    default: latest
+  install:
+    description: Set to false when only helper scripts are needed.
+    default: 'true'
+outputs:
+  scripts:
+    description: Absolute path to the scripts from this action revision.
+    value: ${{ steps.paths.outputs.scripts }}
+  tag:
+    description: Resolved release tag, or source.
+    value: ${{ steps.binary.outputs.tag || 'source' }}
+runs:
+  using: composite
+  steps:
+    - id: paths
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: echo "scripts=$(cd "$ACTION_PATH/../../scripts" && pwd)" >> "$GITHUB_OUTPUT"
+    - id: binary
+      if: inputs.install == 'true' && inputs.sweet-version != 'source'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SWEET_VERSION: ${{ inputs.sweet-version }}
+        SCRIPTS: ${{ steps.paths.outputs.scripts }}
+      run: python3 "$SCRIPTS/install-sweet.py"
+    - if: inputs.install == 'true' && inputs.sweet-version == 'source'
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: ${{ github.action_path }}/../../../apps/sweet/go.mod
+        cache-dependency-path: ${{ github.action_path }}/../../../apps/sweet/go.sum
+    - if: inputs.install == 'true' && inputs.sweet-version == 'source'
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        destination=$(mktemp -d "$RUNNER_TEMP/sweet-source-XXXXXX")
+        cd "$ACTION_PATH/../../.."
+        go build -o "$destination/sweet" ./apps/sweet/cmd/sweet
+        echo "$destination" >> "$GITHUB_PATH"

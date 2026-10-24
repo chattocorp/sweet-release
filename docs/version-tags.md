@@ -1,8 +1,15 @@
 # Version tags
 
-On pushes to `main`, CI calls `.github/workflows/tag-releases.yml` after Go and
-documentation checks succeed. It checks out the exact pushed SHA, fetches tags, and runs the Go tag
-planner through `.github/scripts/tag-releases.sh`. Pull requests, other branches,
+On pushes to `main`, CI calls `.github/workflows/release.yml` after all checks
+succeed, with
+`sweet-version: source`. The shared workflow checks out the exact pushed SHA,
+fetches tags, and runs the tag planner through `.github/scripts/tag-releases.sh`.
+It returns all package releases and runs the configured `release-command` for each
+one at its exact commit. Our command, `.github/scripts/release-package.sh`, manages
+GitHub Releases and selects CLI packages for binary builds. External callers can
+omit the command for tags only, or set `push-tags: false` to plan releases without
+creating tags and let their command handle all publication policy.
+Pull requests, other branches,
 and manual CI dispatches do not create tags. Each main push has its own concurrency
 group so a later push cannot cancel a range before tagging. Separate runs can push
 different tags concurrently; a competing write to the same tag fails without force.
@@ -52,7 +59,7 @@ none of that push's refs are updated. Rerunning the original CI run safely retri
 the original range after a failure; later pushes do not automatically backfill it.
 
 The job uses `GITHUB_TOKEN` with `contents: write`. Tags pushed by this token do not
-start other push-triggered workflows. The tag job therefore calls publishing
+start other push-triggered workflows. CI therefore calls publishing
 explicitly for each CLI tag in its plan. See [CLI publishing](publishing.md) and
 [GitHub's workflow trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
 The local tests use temporary repositories and a bare remote to verify annotated

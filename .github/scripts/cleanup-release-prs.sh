@@ -6,12 +6,13 @@ set -euo pipefail
 gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100" > "$RUNNER_TEMP/release-pulls.json"
 gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/git/matching-refs/heads/sweet/release" > "$RUNNER_TEMP/release-refs.json"
 
-jq --arg repo "$GITHUB_REPOSITORY" --argjson desired "$RELEASE_PRS" '
+jq --arg repo "$GITHUB_REPOSITORY" --argjson desired "$RELEASE_PRS" \
+  --arg author "${RELEASE_PR_AUTHOR:-github-actions[bot]}" --arg base "${BASE_BRANCH:-main}" '
   flatten | map(select(.head.repo.full_name == $repo)) | group_by(.head.ref)[] |
   select(.[0].head.ref | test("^sweet/release$|^sweet/release-package-[a-z0-9-]+-[0-9a-f]{16}$")) |
   select(.[0].head.ref as $branch | $desired | all(.branch != $branch)) |
-  select(any(.user.login == "github-actions[bot]" and .base.ref == "main")) |
-  select(all(.state != "open" or (.user.login == "github-actions[bot]" and .base.ref == "main"))) |
+  select(any(.user.login == $author and .base.ref == $base)) |
+  select(all(.state != "open" or (.user.login == $author and .base.ref == $base))) |
   {branch: .[0].head.ref, numbers: map(select(.state == "open") | .number)}
 ' "$RUNNER_TEMP/release-pulls.json" | jq -sc '.' > "$RUNNER_TEMP/obsolete-release-prs.json"
 

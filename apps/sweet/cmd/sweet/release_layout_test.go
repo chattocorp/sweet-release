@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-// Use the retained hook outside the checkout, as the publishing workflow does.
-func TestRetainedReleaseChecks(t *testing.T) {
+// Run the build hook against each supported source layout.
+func TestReleaseChecks(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("release hooks use Bash")
 	}
@@ -33,12 +33,6 @@ func TestRetainedReleaseChecks(t *testing.T) {
 			}
 			if err := os.WriteFile(filepath.Join(dir, "go"), []byte("#!/bin/sh\necho \"$*\"\n[ -z \"$FAIL_TEST\" ] || [ \"$1\" != test ]\n"), 0o755); err != nil {
 				t.Fatal(err)
-			}
-			selector := exec.Command("bash", script, "version-file")
-			selector.Dir = dir
-			selected, err := selector.CombinedOutput()
-			if err != nil || strings.TrimSpace(string(selected)) != mod {
-				t.Fatalf("Go version file: %s, %v; want %s", selected, err, mod)
 			}
 			cmd := exec.Command("bash", script)
 			cmd.Dir = dir

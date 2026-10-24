@@ -16,6 +16,82 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  release-contract:
+    name: Release contract (${{ matrix.mode }})
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: plan-only
+            command: ''
+          - mode: command
+            command: |
+              test "$RELEASE_PACKAGE" = apps/sweet
+              test "$RELEASE_VERSION" = 0.2.0
+              test -n "$RELEASE_TAG"
+              test "$RELEASE_COMMIT" = 0c591e471bac87293929f0e9a1edcfc3f8a8b918
+              test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+              sweet status --json
+    uses: ./.github/workflows/release.yml
+    with:
+      # Historical version bump: exercise real planning and exact-commit commands
+      # without permission to push tags or publish anything.
+      base: 9316cc87dfcac8b7cbeb2e407caee4279731e405
+      head: 0c591e471bac87293929f0e9a1edcfc3f8a8b918
+      sweet-version: source
+      push-tags: false
+      release-command: ${{ matrix.command }}
+
+  release-policy:
+    name: Published release retry
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # This exercises published-release retries without permission to mutate releases.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: apps/sweet/v0.2.0
+          fetch-depth: 0
+      - id: source
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - id: bootstrap
+        uses: $/.github/actions/bootstrap
+        with:
+          install: 'false'
+      - name: Verify published release was preserved
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SCRIPTS: ${{ steps.bootstrap.outputs.scripts }}
+          RELEASE_PACKAGE: apps/sweet
+          RELEASE_VERSION: 0.2.0
+          RELEASE_TAG: apps/sweet/v0.2.0
+          RELEASE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: |
+          state=$(python3 "$SCRIPTS/github-release.py" status "$RELEASE_TAG" "$RELEASE_COMMIT")
+          [[ "$state" == published ]]
+          bash "$SCRIPTS/release-package.sh"
+
+  setup-action:
+    name: Install released CLI (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/bootstrap
+        with:
+          sweet-version: apps/sweet/v0.2.0
+      - shell: bash
+        run: sweet --version
+
   check:
     name: Go checks
     runs-on: ubuntu-latest
@@ -37,7 +113,7 @@ jobs:
         run: go test -race ./apps/sweet/...
       - name: Run static checks
         run: go vet ./apps/sweet/...
-      - name: Test release promotion
+      - name: Test workflow scripts
         run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
       - name: Build CLI
         run: go build -o bin/sweet ./apps/sweet/cmd/sweet
@@ -60,12 +136,32 @@ jobs:
       - run: pnpm --dir apps/docs run check
       - run: pnpm --dir apps/docs run build
 
-  tag:
-    needs: [check, docs]
+  release:
+    needs: [check, docs, setup-action, release-policy, release-contract]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
-    uses: ./.github/workflows/tag-releases.yml
+    uses: ./.github/workflows/release.yml
     with:
       base: ${{ github.event.before }}
       head: ${{ github.sha }}
+      sweet-version: source
+      release-command: bash .github/scripts/release-package.sh
+
+  promote-latest:
+    needs: release
+    if: needs.release.outputs.releases != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    concurrency:
+      group: promote-latest-cli
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - name: Promote highest stable CLI release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 .github/scripts/promote-latest.py

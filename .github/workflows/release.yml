@@ -3,94 +3,98 @@ name: Release
 on:
   workflow_call:
     inputs:
-      tag:
+      base:
+        description: Commit before the push (all-zero SHA for a new branch).
         required: true
         type: string
-      commit:
+      head:
+        description: Exact commit to release after caller checks pass.
         required: true
         type: string
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing CLI tag to publish (sweet@... or a historical path/v... tag)
-        required: true
+      sweet-version:
+        description: Sweet release tag, latest, or source for development.
         type: string
+        default: latest
+      push-tags:
+        description: Create and push package tags before running release commands.
+        type: boolean
+        default: true
+      release-command:
+        description: Bash command to run at each released package's commit, from the repository root.
+        type: string
+        default: ''
+    secrets:
+      release-token:
+        description: Optional token for tag pushes and release commands; defaults to GITHUB_TOKEN.
+        required: false
+    outputs:
+      releases:
+        description: JSON array of package, version, tag, and commit, including matching existing tags on retries.
+        value: ${{ jobs.plan.outputs.releases }}
 
-permissions:
-  contents: write
-
-concurrency:
-  group: publish-${{ inputs.tag }}
-  cancel-in-progress: false
+# Inherit caller permissions: plan-only runs can use contents: read.
+# Tag pushes and publication commands require the caller to grant write access.
 
 jobs:
-  release:
-    if: github.ref == 'refs/heads/main'
+  plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
+    outputs:
+      releases: ${{ steps.tags.outputs.releases }}
+      sweet-tag: ${{ steps.tooling.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.head }}
           fetch-depth: 0
-      # Use this workflow's tooling even when publishing an older source tag.
-      - uses: actions/setup-go@v7
+          token: ${{ secrets.release-token || github.token }}
+      - id: tooling
+        uses: $/.github/actions/bootstrap
         with:
-          go-version-file: apps/sweet/go.mod
-          cache-dependency-path: apps/sweet/go.sum
-      - name: Preserve release tooling
-        run: |
-          go build -o "$RUNNER_TEMP/sweet-metadata" ./apps/sweet/cmd/sweet
-          cp .goreleaser.yml "$RUNNER_TEMP/goreleaser.yml"
-          cp .github/scripts/publish-cli.sh "$RUNNER_TEMP/publish-cli.sh"
-          cp .github/scripts/check-go.sh "$RUNNER_TEMP/check-go.sh"
-      - name: Check out release source
+          sweet-version: ${{ inputs.sweet-version }}
+      - name: Plan releases and optionally push tags
+        id: tags
         env:
-          TAG: ${{ inputs.tag }}
-          EXPECTED_COMMIT: ${{ inputs.commit }}
+          BASE: ${{ inputs.base }}
+          HEAD: ${{ inputs.head }}
+          SCRIPTS: ${{ steps.tooling.outputs.scripts }}
+          PUSH_TAGS: ${{ inputs.push-tags }}
         run: |
-          [[ "$TAG" == sweet@* || "$TAG" == apps/sweet/v* || "$TAG" == pkg/sweet/v* || "$TAG" == pkg/cli/v* ]]
-          commit=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
-          [[ -z "$EXPECTED_COMMIT" || "$commit" == "$EXPECTED_COMMIT" ]]
-          git checkout --detach "$commit"
-      - name: Select release Go module
-        id: release-go
-        run: |
-          echo "version-file=$(bash "$RUNNER_TEMP/check-go.sh" version-file)" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: ${{ steps.release-go.outputs.version-file }}
-          cache-dependency-path: |
-            apps/sweet/go.sum
-            pkg/sweet/go.sum
-            go.sum
-            pkg/cli/go.sum
-            pkg/core/go.sum
-      - uses: goreleaser/goreleaser-action@v7
-        with:
-          version: v2.18.2
-          install-only: true
-      - name: Build and publish CLI
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ inputs.tag }}
-          SWEET_METADATA: ${{ runner.temp }}/sweet-metadata
-          SWEET_GO_CHECK: ${{ runner.temp }}/check-go.sh
-        run: bash "$RUNNER_TEMP/publish-cli.sh" "$TAG" "$RUNNER_TEMP/goreleaser.yml"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          bash "$SCRIPTS/tag-releases.sh" "$(command -v sweet)" "$BASE" "$HEAD"
 
-  promote-latest:
-    needs: release
+  release:
+    needs: plan
+    if: inputs.release-command != '' && needs.plan.outputs.releases != '[]'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    # Different tags can build concurrently, but Latest is repository-wide.
-    # A replacement queued job reconciles all releases, not only its own tag.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.releases) }}
     concurrency:
-      group: promote-latest-cli
+      group: sweet-github-release-${{ matrix.tag }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
-      - name: Promote highest stable CLI release
+        with:
+          ref: ${{ matrix.commit }}
+          fetch-depth: 0
+          token: ${{ secrets.release-token || github.token }}
+      - id: tooling
+        uses: $/.github/actions/bootstrap
+        with:
+          sweet-version: ${{ needs.plan.outputs.sweet-tag }}
+      - name: Run package release command
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.release-token || github.token }}
           GH_REPO: ${{ github.repository }}
-        run: python3 .github/scripts/promote-latest.py
+          RELEASE_PACKAGE: ${{ matrix.package }}
+          RELEASE_VERSION: ${{ matrix.version }}
+          RELEASE_TAG: ${{ matrix.tag }}
+          RELEASE_COMMIT: ${{ matrix.commit }}
+          RELEASE_COMMAND: ${{ inputs.release-command }}
+          SCRIPTS: ${{ steps.tooling.outputs.scripts }}
+        run: bash "$SCRIPTS/release-command.sh"
