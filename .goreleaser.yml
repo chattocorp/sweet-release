@@ -38,7 +38,7 @@ checksum:
   name_template: checksums.txt
 
 snapshot:
-  version_template: '{{ if index .Env "SWEET_RELEASE_VERSION" }}{{ .Env.SWEET_RELEASE_VERSION }}{{ else }}0.0.0-SNAPSHOT-{{ .ShortCommit }}{{ end }}'
+  version_template: '{{ if index .Env "RELEASE_VERSION" }}{{ .Env.RELEASE_VERSION }}{{ else }}0.0.0-SNAPSHOT-{{ .ShortCommit }}{{ end }}'
 
 changelog:
   disable: true

@@ -5,8 +5,8 @@ succeed, with
 `sweet-version: source`. The shared workflow checks out the exact pushed SHA,
 fetches tags, and runs the tag planner through `.github/scripts/tag-releases.sh`.
 It returns all package releases and runs the configured `release-command` for each
-one at its exact commit. Our command, `.github/scripts/release-package.sh`, manages
-GitHub Releases and selects CLI packages for binary builds. External callers can
+one at its exact commit. Our caller enables the shared GitHub release lifecycle
+and selects `apps/sweet` for GoReleaser builds. External callers can
 omit the command for tags only, or set `push-tags: false` to plan releases without
 creating tags and let their command handle all publication policy.
 Pull requests, other branches,
@@ -36,9 +36,9 @@ remote tags before invoking it if existing-tag checks must include remote state.
 Use a full-history checkout. The base must be on the head's first-parent history;
 rewritten or unrelated histories are rejected.
 
-Each version change produces `<directory>/v<version>` at the commit that introduces
+Each version change produces `<directory-name>@<version>` at the commit that introduces
 it to the first-parent history. A root package uses `v<version>`. For example,
-`pkg/core` at `0.1.0` gets `pkg/core/v0.1.0`. A merge commit is compared with its first
+`pkg/core` at `0.1.0` gets `core@0.1.0`. A merge commit is compared with its first
 parent, so intermediate versions on an unmerged feature branch are not released.
 Multiple release commits within one push retain their individual tag targets.
 CI verifies the pushed tip; it does not separately test every intermediate commit.
@@ -47,8 +47,8 @@ Unchanged versions, pending notes, deleted packages, and `0.0.0` versions produc
 no tags. A newly added manifest above `0.0.0` is eligible. For an all-zero base
 (initial branch creation), only the head snapshot is considered; older versions
 are not backfilled. Manual version edits on main are treated like prepared releases.
-Package paths must produce valid Git tag names; for example, paths containing spaces
-cannot be tagged with this convention. Tag customization is not implemented.
+Tag names must be valid Git refs. A package can set `tag-prefix` in `.sweet.yml`
+to override the literal text before its version.
 
 The script invokes `sweet git tag --base <before-sha> --head <after-sha> --json`
 to create annotated tags, then pushes only the planned refs with

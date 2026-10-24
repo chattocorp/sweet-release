@@ -8,12 +8,12 @@ Sweet's GitHub automation has two steps:
 | Workflow | Purpose |
 | --- | --- |
 | `bump.yml` | Bump versions and create or update release PRs. |
-| `release.yml` | Find committed releases, optionally push tags, and run your release command. |
+| `release.yml` | Tag committed versions and optionally build assets and publish GitHub Releases. |
 
 Both workflows use GitHub-hosted Ubuntu runners and download a published Sweet
 binary by default. Consumers do not need Go or copies of Sweet's helper scripts.
-Your release command owns building, uploading, deploying, and publication.
-The release workflow does not create GitHub Releases automatically.
+The Sweet CLI has no GitHub release behavior. The reusable workflow owns the
+optional GitHub lifecycle; callers keep their build configuration locally.
 
 The examples use `@main` after these files have merged. For production, replace
 `@main` with a full commit SHA. The automation revision and CLI release tag are
@@ -100,6 +100,12 @@ jobs:
 | `sweet-version` | `latest` | CLI release tag to install. |
 | `push-tags` | `true` | Create and push package tags before running commands. |
 | `release-command` | Empty | Bash command to run for each planned release. |
+| `github-release` | `false` | Prepare notes and a draft, then upload assets and publish. |
+| `github-latest` | `auto` | Let GitHub choose Latest, or explicitly use `true`/`false`. |
+| `goreleaser` | Empty | Pinned GoReleaser version, such as `v2.18.2`, for archive builds. |
+| `go-version-file` | `go.mod` | Go version file for GoReleaser builds. |
+| `goreleaser-package` | Empty | Restrict GoReleaser to one package path; other packages publish notes only. |
+| `release-assets` | Empty | Additional newline-separated file globs to upload. Each must match files. |
 
 The caller owns triggers and check dependencies. Do not cancel or coalesce main-push
 runs: every pushed range must reach release planning. Include the pushed SHA in any
@@ -123,6 +129,52 @@ or use `push-tags: false` and let your command implement a different push strate
 See GitHub's [workflow trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)
 and [push event limits](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push).
 
+### Publish GitHub Releases
+
+Set `github-release: true` to verify the remote tag, read the package name and
+changelog, and prepare a draft. After builds and uploads succeed, the workflow
+publishes the draft. Prerelease versions produce GitHub prereleases. Tags must
+exist remotely before draft preparation; normally leave `push-tags: true`.
+
+For a Go CLI, add these inputs to the shared release call:
+
+```yaml
+      github-release: true
+      goreleaser: v2.18.2
+```
+
+Keep build targets, linker flags, archive names, and checksums in the caller's
+`.goreleaser.yml`. The workflow installs Go and the pinned GoReleaser binary,
+then builds in snapshot mode without GoReleaser publishing. Configure the
+snapshot version to use the version supplied by the workflow:
+
+```yaml
+snapshot:
+  version_template: '{{ if index .Env "RELEASE_VERSION" }}{{ .Env.RELEASE_VERSION }}{{ else }}0.0.0-SNAPSHOT-{{ .ShortCommit }}{{ end }}'
+changelog:
+  disable: true
+```
+
+The uploader reads `dist/artifacts.json` and uploads Archive and Checksum
+artifacts. At least one of each is required. It verifies the build version, source
+commit, and archive hashes before upload. Other GoReleaser artifact types are not
+uploaded automatically; use `release-assets` for additional files. GoReleaser's
+release and changelog settings do not control the GitHub lifecycle.
+
+For other build systems, use `release-command` to build files and `release-assets`
+to select them. With no build or assets, the workflow publishes release notes only.
+If both GoReleaser and a command are set, the command runs after GoReleaser and
+before uploads, so it can verify binaries or prepare extra files.
+
+Build or upload failures leave the draft unpublished. Rerunning the original CI
+run refreshes the draft and replaces matching assets. Already-published releases
+skip all builds, commands, uploads, and publication. A moved or deleted remote
+tag stops mutations. Do not mutate the same release outside the workflow while
+it is running; the concurrency lock only coordinates workflow jobs.
+
+No tag-triggered publishing workflow is needed. The built-in `GITHUB_TOKEN` is
+sufficient for this path, while Bump still needs a token that can trigger PR CI.
+
 ### Run a release command
 
 The command runs from the repository root at the exact commit that introduced the
@@ -140,7 +192,9 @@ Sweet is installed, and these environment variables are available:
 
 The script installs any additional tools it needs. For example, it can select a
 package build using `RELEASE_PACKAGE`, upload artifacts, or create a GitHub Release.
-There are no implicit draft or publication steps after it finishes.
+Without `github-release`, the command owns any publication policy. With it,
+the workflow prepares the draft before the command and uploads/publishes after
+the command succeeds; the command should only build or verify files.
 
 Set `push-tags: false` when your command owns tagging or does not need tags. Sweet
 still fetches existing tags and validates the plan, but creates no local or remote
@@ -150,7 +204,8 @@ Up to four release jobs run concurrently. Each job has a 30-minute timeout, and
 commands for the same tag share the `sweet-github-release-<tag>` concurrency group.
 A command or pipeline failure fails that job without cancelling other packages.
 Rerun the original workflow to retry its original range. Existing tags do not
-suppress commands: **make your script safe to repeat**. Sweet cannot guarantee
+suppress commands, but published GitHub Releases do when `github-release` is enabled.
+**Make your script safe to repeat** after a partial failure. Sweet cannot guarantee
 exactly-once publication for arbitrary commands.
 
 ## Sweet's own release policy
@@ -159,9 +214,9 @@ This repository calls `bump.yml` from `prepare-releases.yml` and `release.yml` f
 CI, using `sweet-version: source` to exercise unreleased CLI code. That development
 option builds from the automation revision and requires Go.
 
-Our `release-command` runs `.github/scripts/release-package.sh`. It prepares a GitHub
-Release draft, builds and uploads CLI assets with GoReleaser when applicable, and
-publishes. Other packages publish notes only. Published retries skip the build.
+Our caller enables `github-release` and GoReleaser for `apps/sweet`. Its optional
+command checks the binary version and checksums. Other packages publish notes only.
+There is no repository-specific GitHub lifecycle script. Published retries skip the build.
 After a successful release run, a serialized job promotes the
 highest stable CLI release to Latest. Rerun a failed release run to finish publication
 and promotion.

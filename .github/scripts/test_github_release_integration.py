@@ -1,5 +1,6 @@
 """Real Sweet + Git repositories; only the GitHub network boundary is replaced."""
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -131,81 +132,75 @@ class ReleaseIntegrationTests(unittest.TestCase):
         self.action("draft", success=False, FAKE_GH_FAILURE="api")
         self.assertFalse(self.mutations())
         self.assertFalse((self.root / "release.json").exists())
+    def upload(self, success=True, **extra):
+        result = subprocess.run([sys.executable, str(SCRIPTS / "upload-assets.py")],
+                                cwd=self.repo, env=dict(self.env, RELEASE_TAG=self.tag,
+                                RELEASE_COMMIT=self.commit, RELEASE_VERSION="0.1.0", **extra), capture_output=True, text=True)
+        self.assertEqual(result.returncode == 0, success, result.stderr)
+        return result
 
-    def test_repository_policy_publishes_notes_and_retries(self):
-        env = dict(self.env, RELEASE_PACKAGE=".", RELEASE_VERSION="0.1.0",
-                   RELEASE_TAG=self.tag, RELEASE_COMMIT=self.commit)
-        command = ["bash", str(ROOT / ".github/scripts/release-package.sh")]
-        result = subprocess.run(command, cwd=self.repo, env=env, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
+    def test_shared_upload_failure_retry_and_publication(self):
+        self.action("draft")
+        dist = self.repo / "dist"
+        dist.mkdir()
+        (dist / "archive.tar.gz").write_bytes(b"archive")
+        (dist / "checksums.txt").write_text("fixture")
+        (dist / "metadata.json").write_text(json.dumps({"version": "0.1.0", "commit": self.commit}))
+        (dist / "artifacts.json").write_text(json.dumps([
+            {"type": "Archive", "path": "dist/archive.tar.gz",
+             "extra": {"Checksum": "sha256:" + hashlib.sha256(b"archive").hexdigest()}},
+            {"type": "Checksum", "path": "dist/checksums.txt"},
+            {"type": "Binary", "path": "dist/unpacked-binary"}]))
+        self.upload(success=False, GORELEASER="v2.18.2", FAKE_GH_FAILURE="upload")
+        self.assertTrue(self.record()["isDraft"])
+        (dist / "archive.tar.gz").write_bytes(b"corrupt")
+        self.upload(success=False, GORELEASER="v2.18.2")
+        (dist / "archive.tar.gz").write_bytes(b"archive")
+        (dist / "metadata.json").write_text(json.dumps({"version": "0.0.0-SNAPSHOT", "commit": self.commit}))
+        self.upload(success=False, GORELEASER="v2.18.2")
+        (dist / "metadata.json").write_text(json.dumps({"version": "0.1.0", "commit": self.commit}))
+        self.upload(GORELEASER="v2.18.2")
+        self.assertEqual(set(self.record()["assets"]), {"archive.tar.gz", "checksums.txt"})
+        self.action("publish")
         self.assertFalse(self.record()["isDraft"])
         count = len(self.mutations())
-        result = subprocess.run(command, cwd=self.repo, env=env, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.upload(success=False, GORELEASER="v2.18.2")
         self.assertEqual(len(self.mutations()), count)
 
-    def test_repository_policy_build_failure_leaves_draft_then_retry_publishes(self):
-        if not shutil.which("sha256sum"):
-            self.skipTest("CLI uploader requires sha256sum")
-        package = self.repo / "apps/sweet"
-        package.mkdir(parents=True)
-        for name in (".sweet.yml", "CHANGELOG.md"):
-            (self.repo / name).rename(package / name)
-        self.git("add", ".")
-        self.git("commit", "-m", "CLI release fixture")
-        self.commit = self.git("rev-parse", "HEAD")
-        self.tag = "apps/sweet/v0.1.0"
-        self.git("tag", "-a", self.tag, "-m", "Release")
-        self.git("push", "origin", "--tags")
-        builder = self.bin / "goreleaser"
-        builder.write_text("#!/bin/sh\nexit 1\n")
-        builder.chmod(0o755)
-        env = dict(self.env, RELEASE_PACKAGE="apps/sweet", RELEASE_VERSION="0.1.0",
-                   RELEASE_TAG=self.tag, RELEASE_COMMIT=self.commit)
-        command = ["bash", str(ROOT / ".github/scripts/release-package.sh")]
-        result = subprocess.run(command, cwd=self.repo, env=env, capture_output=True, text=True)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertTrue(self.record()["isDraft"])
-        # Model the hosted runner's locked toolchain during build-tool install.
-        builder.unlink()
-        go = self.bin / "go"
-        go.write_text('#!/bin/sh\n[ "$GOTOOLCHAIN" = auto ] || exit 99\necho toolchain-auto >&2\nexit 1\n')
-        go.chmod(0o755)
-        # Exclude any GoReleaser installed on the test host.
-        for executable in ("bash", "python3", "git", "dirname", "mktemp"):
-            (self.bin / executable).symlink_to(shutil.which(executable))
-        result = subprocess.run(command, cwd=self.repo,
-                                env=dict(env, GOTOOLCHAIN="local", RUNNER_TEMP=str(self.root),
-                                         PATH=os.pathsep.join([str(self.bin), self.build.name])),
-                                capture_output=True, text=True)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("toolchain-auto", result.stderr)
-        self.assertTrue(self.record()["isDraft"])
-        go.unlink()
-        builder.write_text('''#!/usr/bin/env python3
-from pathlib import Path
-import hashlib
-import os
-root = Path("dist")
-binary = root / "sweet_linux_amd64_v1/sweet"
-binary.parent.mkdir(parents=True, exist_ok=True)
-binary.write_text('#!/bin/sh\\necho "sweet ' + os.environ["SWEET_RELEASE_VERSION"] + '"\\n')
-binary.chmod(0o755)
-checksums = []
-for name in ("artifact.tar.gz", "artifact.zip"):
-    (root / name).write_bytes(b"fixture")
-    checksums.append(hashlib.sha256(b"fixture").hexdigest() + "  " + name)
-(root / "checksums.txt").write_text("\\n".join(checksums) + "\\n")
-''')
-        builder.chmod(0o755)
-        result = subprocess.run(command, cwd=self.repo, env=env, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertFalse(self.record()["isDraft"])
-        self.assertEqual(len(self.record()["assets"]), 3)
+    def test_custom_assets_and_remote_tag_recheck(self):
+        self.action("draft")
+        (self.repo / "asset.zip").write_bytes(b"archive")
+        self.upload(RELEASE_ASSETS="*.zip")
         count = len(self.mutations())
-        builder.write_text("#!/bin/sh\nexit 99\n")
-        result = subprocess.run(command, cwd=self.repo, env=env, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        subprocess.run(["git", "--git-dir", str(self.remote), "update-ref",
+                        f"refs/tags/{self.tag}", self.later], check=True)
+        self.upload(success=False, RELEASE_ASSETS="*.zip")
+        self.assertTrue(self.record()["isDraft"])
+        self.assertEqual(len(self.mutations()), count)
+
+    def test_missing_assets_fail_before_upload(self):
+        self.action("draft")
+        count = len(self.mutations())
+        self.upload(success=False, RELEASE_ASSETS="missing/*")
+        self.upload(success=False, GORELEASER="v2.18.2")
+        self.assertEqual(len(self.mutations()), count)
+        self.assertTrue(self.record()["isDraft"])
+
+    def test_notes_only_publication(self):
+        self.action("draft")
+        self.upload()
+        self.action("publish")
+        self.assertFalse(self.record()["isDraft"])
+        self.assertFalse(self.record()["assets"])
+
+    def test_duplicate_asset_names_fail_before_upload(self):
+        self.action("draft")
+        for folder in ("one", "two"):
+            directory = self.repo / folder
+            directory.mkdir()
+            (directory / "artifact.zip").write_bytes(b"archive")
+        count = len(self.mutations())
+        self.upload(success=False, RELEASE_ASSETS="*/*.zip")
         self.assertEqual(len(self.mutations()), count)
 
 

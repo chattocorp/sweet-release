@@ -155,6 +155,11 @@ class ReleaseTests(unittest.TestCase):
         self.manage("publish", latest="true")
         self.assertIn("--latest=true", self.mutations[-1])
 
+    def test_automatic_latest_leaves_the_decision_to_github(self):
+        self.manage("draft")
+        self.manage("publish", latest="auto")
+        self.assertFalse(any(arg.startswith("--latest") for arg in self.mutations[-1]))
+
     def test_status_needs_no_cli_or_metadata(self):
         self.assertEqual(release.manage("status", "api@1.2.3", COMMIT), "missing")
         self.records.append({"isDraft": True, "isPrerelease": False})

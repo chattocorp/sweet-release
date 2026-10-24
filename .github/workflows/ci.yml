@@ -46,35 +46,18 @@ jobs:
 
   release-policy:
     name: Published release retry
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
     # This exercises published-release retries without permission to mutate releases.
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: apps/sweet/v0.2.0
-          fetch-depth: 0
-      - id: source
-        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - id: bootstrap
-        uses: $/.github/actions/bootstrap
-        with:
-          install: 'false'
-      - name: Verify published release was preserved
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          SCRIPTS: ${{ steps.bootstrap.outputs.scripts }}
-          RELEASE_PACKAGE: apps/sweet
-          RELEASE_VERSION: 0.2.0
-          RELEASE_TAG: apps/sweet/v0.2.0
-          RELEASE_COMMIT: ${{ steps.source.outputs.commit }}
-        run: |
-          state=$(python3 "$SCRIPTS/github-release.py" status "$RELEASE_TAG" "$RELEASE_COMMIT")
-          [[ "$state" == published ]]
-          bash "$SCRIPTS/release-package.sh"
+    uses: ./.github/workflows/release.yml
+    with:
+      base: 6e0540d1d474fd83577c85f3f896f43dae275b88
+      head: fc9e0dea13c61edf7bdd0a04a21eca0f68a72e35
+      sweet-version: source
+      github-release: true
+      push-tags: false
+      # The matching tag exists: planning must not push; publication must skip.
+      release-command: exit 99
 
   setup-action:
     name: Install released CLI (${{ matrix.os }})
@@ -146,7 +129,16 @@ jobs:
       base: ${{ github.event.before }}
       head: ${{ github.sha }}
       sweet-version: source
-      release-command: bash .github/scripts/release-package.sh
+      github-release: true
+      github-latest: ${{ 'false' }}
+      goreleaser: v2.18.2
+      goreleaser-package: apps/sweet
+      go-version-file: apps/sweet/go.mod
+      release-command: |
+        if [[ "$RELEASE_PACKAGE" == apps/sweet ]]; then
+          test "$(dist/sweet_linux_amd64_v1/sweet --version)" = "sweet $RELEASE_VERSION"
+          (cd dist && sha256sum --check checksums.txt)
+        fi
 
   promote-latest:
     needs: release
