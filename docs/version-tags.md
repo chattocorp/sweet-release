@@ -1,8 +1,14 @@
 # Version tags
 
 On pushes to `main`, CI calls `.github/workflows/tag-releases.yml` after Go and
-documentation checks succeed. It checks out the exact pushed SHA, fetches tags, and runs the Go tag
-planner through `.github/scripts/tag-releases.sh`. Pull requests, other branches,
+documentation checks succeed. It calls `reusable-release.yml` with
+`sweet-version: source`. The shared workflow checks out the exact pushed SHA,
+fetches tags, and runs the tag planner through `.github/scripts/tag-releases.sh`.
+It returns all package releases and prepares a draft GitHub Release for each one.
+`tag-releases.yml` selects CLI packages for our binary builder and publishes other
+packages' release notes without assets. External callers publish immediately by
+default, or set `draft: true` and upload assets before the shared publication step.
+Pull requests, other branches,
 and manual CI dispatches do not create tags. Each main push has its own concurrency
 group so a later push cannot cancel a range before tagging. Separate runs can push
 different tags concurrently; a competing write to the same tag fails without force.

@@ -16,37 +16,60 @@ permissions:
 jobs:
   tag:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      cli-releases: ${{ steps.tags.outputs.cli-releases }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.head }}
-          fetch-depth: 0
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: apps/sweet/go.mod
-          cache-dependency-path: apps/sweet/go.sum
-      - name: Create release tags
-        id: tags
-        env:
-          BASE: ${{ inputs.base }}
-          HEAD: ${{ inputs.head }}
-        run: |
-          go build -o "$RUNNER_TEMP/sweet" ./apps/sweet/cmd/sweet
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          bash .github/scripts/tag-releases.sh "$RUNNER_TEMP/sweet" "$BASE" "$HEAD"
+    uses: ./.github/workflows/reusable-release.yml
+    with:
+      base: ${{ inputs.base }}
+      head: ${{ inputs.head }}
+      sweet-version: source
+      draft: true
 
-  publish:
+  select-cli:
     needs: tag
-    if: needs.tag.outputs.cli-releases != '[]'
+    runs-on: ubuntu-latest
+    outputs:
+      releases: ${{ steps.select.outputs.releases }}
+      other-releases: ${{ steps.select.outputs.other-releases }}
+    steps:
+      - id: select
+        env:
+          RELEASES: ${{ needs.tag.outputs.releases }}
+        run: |
+          releases=$(jq -c '[.[] | select(.package == "apps/sweet" or .package == "pkg/sweet" or .package == "pkg/cli")]' <<< "$RELEASES")
+          echo "releases=$releases" >> "$GITHUB_OUTPUT"
+          others=$(jq -c '[.[] | select(.package != "apps/sweet" and .package != "pkg/sweet" and .package != "pkg/cli")]' <<< "$RELEASES")
+          echo "other-releases=$others" >> "$GITHUB_OUTPUT"
+
+  publish-notes:
+    needs: select-cli
+    if: needs.select-cli.outputs.other-releases != '[]'
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.tag.outputs.cli-releases) }}
+        include: ${{ fromJSON(needs.select-cli.outputs.other-releases) }}
+    concurrency:
+      group: sweet-github-release-${{ matrix.tag }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.commit }}
+          fetch-depth: 0
+      - uses: $/actions/github-release
+        with:
+          phase: publish
+          package: ${{ matrix.package }}
+          version: ${{ matrix.version }}
+          tag: ${{ matrix.tag }}
+          commit: ${{ matrix.commit }}
+
+  publish:
+    needs: select-cli
+    if: needs.select-cli.outputs.releases != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.select-cli.outputs.releases) }}
     uses: ./.github/workflows/release.yml
     with:
       tag: ${{ matrix.tag }}

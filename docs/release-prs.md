@@ -4,11 +4,14 @@ The `Release PR` workflow runs on pushes to `main` or manual dispatch on `main`.
 It lists packages on current `main` with `sweet status --json`, then uses independent
 checkouts of that commit to run `sweet bump` and verify the changed files. It uses
 `peter-evans/create-pull-request` to create or update PRs into `main`.
-Configure PR policy in `.github/workflows/release-pr.yml`:
+The caller `.github/workflows/release-pr.yml` delegates to
+`.github/workflows/reusable-release-pr.yml`. It uses `sweet-version: source` to
+exercise unreleased CLI changes; external callers install a binary release.
+Configure PR policy in the caller:
 
 ```yaml
-env:
-  RELEASE_PR_STRATEGY: per-package # or combined
+with:
+  strategy: per-package # or combined
 ```
 
 Sweet no longer exposes `release-pr` or reads a PR strategy. Remove the obsolete
@@ -55,9 +58,9 @@ empty list for a no-op). After all PR jobs succeed, cleanup collects those resul
 requires one result per job, and closes obsolete bot-created
 release PRs and deletes their branches. This handles consumed notes, removed
 packages, merged PRs, and switching strategies. Cleanup only acts on the reserved
-branch names in this repository that have a bot-created PR targeting `main`;
-human-created open PRs and fork branches are left alone. Branches without any
-associated bot-created PR are also left alone. If `main` has changed during the
+branch names in this repository that have a PR from the configured owner targeting
+the base branch; other authors' open PRs and fork branches are left alone. Branches
+without any associated owner-created PR are also left alone. If `main` has changed during the
 run, cleanup waits for the next run. After merging, successful CI creates version
 [version tags](version-tags.md). CLI tags then publish binary archives.
 
@@ -69,15 +72,17 @@ strategies retains the old PRs until all replacements succeed. Rerun after a Git
 failure to reconcile the PRs. A subsequent run always starts from current `main`.
 The workflow rejects plans above GitHub's limit of 256 matrix entries.
 
-The workflow uses `GITHUB_TOKEN` with `contents: write` and `pull-requests: write`.
+The workflow uses `RELEASE_PR_TOKEN` to create PRs and detects its user login for
+cleanup ownership. App tokens require an explicit `pr-author` input. Checkout and
+cleanup use `GITHUB_TOKEN` with `contents: write` and `pull-requests: write`.
 Enable **Allow GitHub Actions to create and approve pull requests** under
 Settings → Actions → General → Workflow permissions (organization policy must
 also allow it). According to [GitHub's workflow trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow),
 PR workflows created by this token require a maintainer to approve their runs.
 Use a GitHub App token in the PR action if unattended PR checks are needed.
 
-This workflow dogfoods the CLI from source. Other projects can use the same
-pattern with an installed `sweet` binary. Add project-specific commands, such
-as `pnpm install`, between the bump and verification/PR steps to include lockfile
-updates. The workflow helper supplies the job matrix; no Git history scan or
-publishing task is needed.
+This workflow dogfoods the CLI from source. Other projects call the shared workflow
+with a released binary. The `prepare-command` input runs project-specific commands
+after bumping; this repository uses `.github/scripts/prepare-release.sh` for docs
+lockfiles and Go checks. See the [consumer guide](../apps/docs/src/content/docs/guides/github-actions.md)
+for inputs, authentication, and examples.

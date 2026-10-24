@@ -269,15 +269,18 @@ func TestReleasePRCleanup(t *testing.T) {
 	patch := func(n string) string { return "api --method PATCH repos/" + repo + "/pulls/" + n + " -f state=closed" }
 	deleteRef := func(branch string) string { return "api --method DELETE repos/" + repo + "/git/refs/heads/" + branch }
 	for _, tc := range []struct {
-		name    string
-		desired []map[string]string
-		want    []string
-		fail    bool
+		name         string
+		desired      []map[string]string
+		want         []string
+		fail         bool
+		author, base string
 	}{
-		{"per-package", []map[string]string{{"branch": api}}, []string{patch("1"), deleteRef("sweet/release"), deleteRef(merged)}, false},
-		{"combined", []map[string]string{{"branch": "sweet/release"}}, []string{patch("2"), deleteRef(api), deleteRef(merged)}, false},
-		{"no-releases", []map[string]string{}, []string{patch("1"), patch("2"), deleteRef("sweet/release"), deleteRef(api), deleteRef(merged)}, false},
-		{"API-failure", []map[string]string{}, nil, true},
+		{"per-package", []map[string]string{{"branch": api}}, []string{patch("1"), deleteRef("sweet/release"), deleteRef(merged)}, false, "", ""},
+		{"combined", []map[string]string{{"branch": "sweet/release"}}, []string{patch("2"), deleteRef(api), deleteRef(merged)}, false, "", ""},
+		{"no-releases", []map[string]string{}, []string{patch("1"), patch("2"), deleteRef("sweet/release"), deleteRef(api), deleteRef(merged)}, false, "", ""},
+		{"API-failure", []map[string]string{}, nil, true, "", ""},
+		{"personal-token", []map[string]string{}, []string{patch("1"), patch("2"), deleteRef("sweet/release"), deleteRef(api), deleteRef(merged)}, false, "release-maintainer", "stable/next"},
+		{"app-token", []map[string]string{}, []string{patch("1"), patch("2"), deleteRef("sweet/release"), deleteRef(api), deleteRef(merged)}, false, "release-app[bot]", "stable/next"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -289,6 +292,10 @@ func TestReleasePRCleanup(t *testing.T) {
 			}
 			// Two pages verify that candidates are collected across pagination.
 			data, _ := json.Marshal([]any{pulls[:3], pulls[3:]})
+			if tc.author != "" {
+				data = bytes.ReplaceAll(data, []byte(`"github-actions[bot]"`), []byte(`"`+tc.author+`"`))
+				data = bytes.ReplaceAll(data, []byte(`"main"`), []byte(`"`+tc.base+`"`))
+			}
 			write("pulls.json", data, 0o644)
 			var refs []map[string]string
 			for _, branch := range []string{"sweet/release", api, merged, human, protected, otherBase} {
@@ -315,7 +322,8 @@ esac
 			cmd := exec.Command("bash", script)
 			cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 				"FIXTURE="+dir, "RUNNER_TEMP="+dir, "GITHUB_REPOSITORY="+repo,
-				"RELEASE_PRS="+string(data), "FAIL_READ="+fail)
+				"RELEASE_PRS="+string(data), "FAIL_READ="+fail,
+				"RELEASE_PR_AUTHOR="+tc.author, "BASE_BRANCH="+tc.base)
 			out, err := cmd.CombinedOutput()
 			if (err != nil) != tc.fail {
 				t.Fatalf("cleanup: %v: %s", err, out)

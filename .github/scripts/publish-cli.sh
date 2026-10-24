@@ -3,7 +3,6 @@ set -euo pipefail
 
 tag=$1
 config=$2
-metadata=${SWEET_METADATA:?Set SWEET_METADATA to the current sweet binary}
 case "$tag" in
   sweet@*) package=apps/sweet ;;
   apps/sweet/v*) package=apps/sweet ;;
@@ -15,7 +14,6 @@ version=${tag#"$package/v"}
 if [[ "$tag" == sweet@* ]]; then version=${tag#sweet@}; fi
 [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse --verify "refs/tags/$tag^{commit}")" ]]
-name=$("$metadata" status --json | jq -er --arg package "$package" '.[] | select(.path == $package) | if (.name // "") == "" then .path else .name end')
 
 # Listing fails on API/auth errors rather than treating them as a missing release.
 releases=$(gh api --paginate 'repos/{owner}/{repo}/releases?per_page=100' --jq '.[] | {tag_name, draft}')
@@ -23,6 +21,10 @@ state=$(jq -sr --arg tag "$tag" 'map(select(.tag_name == $tag)) | if length == 0
 if [[ "$state" == published ]]; then
   echo "$tag is already published."
   exit 0
+fi
+if [[ "$state" != draft ]]; then
+  echo 'Prepare a draft with the Sweet GitHub Release action before uploading.' >&2
+  exit 1
 fi
 
 export SWEET_RELEASE_VERSION="$version"
@@ -37,13 +39,4 @@ goreleaser release --snapshot --clean --config "$temporary/goreleaser.yml"
 # Verify the actual binary, including the linker-supplied version.
 [[ "$(dist/sweet_linux_amd64_v1/sweet --version)" == "sweet $version" ]]
 (cd dist && sha256sum --check checksums.txt)
-notes="$temporary/notes.md"
-"$metadata" changelog "$package" --version "$version" > "$notes"
-
-prerelease=false
-[[ "${version%%+*}" != *-* ]] || prerelease=true
-if [[ "$state" == missing ]]; then
-  gh release create "$tag" --verify-tag --draft --title "$name $version" --notes-file "$notes" --prerelease="$prerelease"
-fi
 gh release upload "$tag" dist/*.tar.gz dist/*.zip dist/checksums.txt --clobber
-gh release edit "$tag" --title "$name $version" --notes-file "$notes" --prerelease="$prerelease" --draft=false --latest=false
