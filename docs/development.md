@@ -93,5 +93,6 @@ and do not publish CLI binaries.
 We use **Means** for issue tracking. Issues live in the Git-tracked `issues/`
 collection. Follow the
 [sweet-issues skill](../.agents/skills/sweet-issues/SKILL.md) when finding, creating,
-or updating issues. Read `issues/means.schema.json` before writing and use
+or updating issues. Read [issues/MEANS.md](../issues/MEANS.md) for the collection
+schema and workflow before use. Use
 `--path issues` from the repository root; Means does not search parent directories.
