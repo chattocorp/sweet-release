@@ -20,7 +20,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-${{ inputs.tag }}
+  group: sweet-github-release-${{ inputs.tag }}
   cancel-in-progress: false
 
 jobs:
@@ -33,17 +33,13 @@ jobs:
         with:
           fetch-depth: 0
       # Use this workflow's tooling even when publishing an older source tag.
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: apps/sweet/go.mod
-          cache-dependency-path: apps/sweet/go.sum
       - name: Preserve release tooling
         run: |
-          go build -o "$RUNNER_TEMP/sweet-metadata" ./apps/sweet/cmd/sweet
           cp .goreleaser.yml "$RUNNER_TEMP/goreleaser.yml"
           cp .github/scripts/publish-cli.sh "$RUNNER_TEMP/publish-cli.sh"
           cp .github/scripts/check-go.sh "$RUNNER_TEMP/check-go.sh"
       - name: Check out release source
+        id: source
         env:
           TAG: ${{ inputs.tag }}
           EXPECTED_COMMIT: ${{ inputs.commit }}
@@ -52,11 +48,30 @@ jobs:
           commit=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
           [[ -z "$EXPECTED_COMMIT" || "$commit" == "$EXPECTED_COMMIT" ]]
           git checkout --detach "$commit"
+          case "$TAG" in
+            sweet@*) package=apps/sweet; version=${TAG#sweet@} ;;
+            apps/sweet/v*) package=apps/sweet; version=${TAG#apps/sweet/v} ;;
+            pkg/sweet/v*) package=pkg/sweet; version=${TAG#pkg/sweet/v} ;;
+            pkg/cli/v*) package=pkg/cli; version=${TAG#pkg/cli/v} ;;
+          esac
+          printf 'package=%s\nversion=%s\ncommit=%s\n' "$package" "$version" "$commit" >> "$GITHUB_OUTPUT"
+      - name: Prepare GitHub Release
+        id: draft
+        uses: $/actions/github-release
+        with:
+          phase: draft
+          package: ${{ steps.source.outputs.package }}
+          version: ${{ steps.source.outputs.version }}
+          tag: ${{ inputs.tag }}
+          commit: ${{ steps.source.outputs.commit }}
+          sweet-version: source
       - name: Select release Go module
+        if: steps.draft.outputs.published != 'true'
         id: release-go
         run: |
           echo "version-file=$(bash "$RUNNER_TEMP/check-go.sh" version-file)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v7
+        if: steps.draft.outputs.published != 'true'
         with:
           go-version-file: ${{ steps.release-go.outputs.version-file }}
           cache-dependency-path: |
@@ -66,17 +81,26 @@ jobs:
             pkg/cli/go.sum
             pkg/core/go.sum
       - uses: goreleaser/goreleaser-action@v7
+        if: steps.draft.outputs.published != 'true'
         with:
           version: v2.18.2
           install-only: true
-      - name: Build and publish CLI
+      - name: Build and upload CLI assets
+        if: steps.draft.outputs.published != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ inputs.tag }}
-          SWEET_METADATA: ${{ runner.temp }}/sweet-metadata
           SWEET_GO_CHECK: ${{ runner.temp }}/check-go.sh
         run: bash "$RUNNER_TEMP/publish-cli.sh" "$TAG" "$RUNNER_TEMP/goreleaser.yml"
+      - name: Publish GitHub Release
+        uses: $/actions/github-release
+        with:
+          phase: publish
+          package: ${{ steps.source.outputs.package }}
+          version: ${{ steps.source.outputs.version }}
+          tag: ${{ inputs.tag }}
+          commit: ${{ steps.source.outputs.commit }}
 
   promote-latest:
     needs: release

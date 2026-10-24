@@ -95,12 +95,17 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var releases []struct{ Tag, Commit string }
-			if err := json.Unmarshal([]byte(strings.TrimPrefix(strings.TrimSpace(string(data)), "cli-releases=")), &releases); err != nil {
+			var releases []struct{ Package, Version, Tag, Commit string }
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(strings.TrimSpace(string(data)), "releases=")), &releases); err != nil {
 				t.Fatal(err)
 			}
-			if len(releases) != 3 || !strings.HasPrefix(releases[0].Tag, "sweet@") || !strings.HasPrefix(releases[1].Tag, "cli@") || !strings.HasPrefix(releases[2].Tag, "pkg/sweet/v") || releases[0].Commit != head || releases[1].Commit != head || releases[2].Commit != head {
+			if len(releases) != 8 {
 				t.Fatalf("wrong publish matrix: %s", data)
+			}
+			for _, release := range releases {
+				if release.Package == "" || release.Version == "" || !strings.HasSuffix(release.Tag, release.Version) || release.Commit != head {
+					t.Fatalf("incomplete release metadata: %s", data)
+				}
 			}
 		}
 	}

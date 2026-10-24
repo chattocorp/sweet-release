@@ -22,6 +22,7 @@ export default defineConfig({
           items: [
             { label: 'Write release notes', slug: 'guides/release-notes' },
             { label: 'Prepare a release', slug: 'guides/prepare-a-release' },
+            { label: 'GitHub Actions', slug: 'guides/github-actions' },
           ],
         },
         { label: 'Configuration', slug: 'reference/configuration' },

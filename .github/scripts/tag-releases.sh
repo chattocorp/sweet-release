@@ -10,7 +10,7 @@ git fetch origin --tags
 plan=$("$sweet" git tag --base "$base" --head "$head" --json)
 
 refs=()
-while IFS=$'\t' read -r name commit exists; do
+while IFS=$'\t' read -r name _commit _exists; do
   # Include matching local tags too, so retrying a rejected push can finish.
   refs+=("refs/tags/$name:refs/tags/$name")
 done < <(jq -r '.[] | [.name, .commit, .exists] | @tsv' <<< "$plan")
@@ -23,7 +23,7 @@ else
 fi
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-  printf 'cli-releases=%s\n' "$(jq -c '[.[] | select(.package == "apps/sweet" or .package == "pkg/sweet" or .package == "pkg/cli") | {tag: .name, commit: .commit}]' <<< "$plan")" >> "$GITHUB_OUTPUT"
+  printf 'releases=%s\n' "$(jq -c '[.[] | {package, version, tag: .name, commit}]' <<< "$plan")" >> "$GITHUB_OUTPUT"
 fi
 
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then

@@ -107,9 +107,10 @@ Your automation owns PR branches, titles, descriptions, and cleanup. Sweet has
 no `release-pr` command or PR strategy setting. Extract descriptions from the
 updated changelogs with `sweet changelog <package> --version <version>`.
 
+For reusable workflows and binary installation, see [GitHub Actions](../github-actions/).
 For a working automation example, see this repository's
 [Release PR workflow](https://github.com/chattocorp/sweet-release/blob/main/.github/workflows/release-pr.yml).
-It uses `RELEASE_PR_STRATEGY: per-package` in the workflow; set it to `combined`
+It passes `strategy: per-package` to the shared workflow; set it to `combined`
 for one PR. Individual package PR titles include the display name (or path) and
 bumped version, such as `chore: release Sweet Release 0.2.0`.
 Each package's PR description heading contains its display name (or
@@ -119,8 +120,10 @@ separate PRs do not coordinate shared writes. The workflow verifies changed
 checkouts and cleans up obsolete PRs only after all jobs succeed. Make corrections
 through `main`, since the next run can overwrite edits on generated branches.
 
-In this repository, merging a CLI release PR starts CI, tagging, and binary
-publishing. After publication, the release workflow marks the highest published
+In this repository, merging a release PR starts CI, tagging, and creation of a
+draft GitHub Release. CLI releases build and upload binaries before Sweet publishes
+the draft; docs releases publish their notes without assets. After publication,
+the release workflow marks the highest published
 stable CLI version as GitHub's Latest release. It includes historical CLI tag
 prefixes when comparing versions, but excludes drafts and prereleases. Publishing
 an older version does not displace a newer stable release. If Latest promotion

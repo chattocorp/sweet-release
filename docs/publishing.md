@@ -3,7 +3,8 @@
 After tags are pushed, the tag workflow calls `.github/workflows/release.yml`
 for each software release in the plan. Only `apps/sweet` and historical
 `pkg/sweet` and `pkg/cli`
-releases build binaries; docs and retired core releases do not.
+releases build binaries; other packages publish GitHub Release notes without assets.
+The shared release workflow creates drafts for all planned package releases.
 Each job checks out the exact tag commit and verifies it against the planner's
 commit. Jobs for the same tag are serialized. Publishing failures leave tags
 intact; rerunning CI retries publishing, including tags that already exist.
@@ -22,8 +23,9 @@ gh workflow run release.yml --ref main -f tag=apps/sweet/v0.1.0
 ```
 
 GoReleaser's free edition builds archives in snapshot mode with an explicit
-release version, avoiding its Pro-only support for prefixed tags. GitHub CLI
-publishes the artifacts against the existing package tag. No extra
+release version, avoiding its Pro-only support for prefixed tags. The build script
+uploads artifacts to the existing draft. `actions/github-release` owns draft
+creation, release notes, and final publication. No extra
 tags are created. The job checks the Linux binary's version and archive checksums
 before upload. Release notes come from that version's CLI changelog section.
 
@@ -39,12 +41,15 @@ It excludes the version heading and earlier history,
 preserves the body, and ignores headings inside fenced code blocks. A missing
 version, missing changelog, or changelog without released versions is an error.
 Explicit packages need no repository configuration. Publishing
-uses the current metadata binary to read the tagged changelog, so older source
+uses the shared action's current metadata binary to read the tagged changelog, so older source
 tags do not need to support this command.
 
-Uploads go to a draft release, which is published only after all uploads succeed.
+`actions/github-release` first prepares a draft from the package metadata at the
+verified tag commit. The build script refuses to upload without an existing draft.
+The action's publish phase runs only after all builds and uploads succeed.
 A retry replaces assets in an unfinished draft; an already published release is
-left unchanged. API errors stop the job. Prerelease versions produce GitHub
+left unchanged. The `published` output skips rebuilding on retries. API errors
+stop the job. Prerelease versions produce GitHub
 prereleases. After publishing, a separate job sets GitHub's Latest designation to
 the highest published stable CLI version. It compares semantic versions across
 `apps/sweet/v`, `pkg/sweet/v`, and `pkg/cli/v` tags. Drafts, prereleases, and other
