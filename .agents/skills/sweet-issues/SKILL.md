@@ -9,8 +9,9 @@ Use the Means collection at `issues/` in this checkout. Run commands from the
 repository root, or pass the absolute path to this checkout's `issues/`.
 Means uses the exact `--path`; it does not search parent directories.
 
-Read `issues/means.schema.json` before writing. It is the source of truth for
-fields and allowed values. Use `means --help` or command-specific help as needed.
+Read `issues/MEANS.md` before use. It is the source of truth for the collection's
+schema and workflow. Follow its guidance for issue content, status changes, and
+validation. Use `means --help` or command-specific help as needed.
 
 ## Find and read
 
@@ -40,11 +41,6 @@ means create --path issues --input - --json <<'JSON'
 JSON
 ```
 
-Required data fields are `type` and `status`. Priority and labels are optional.
-Keep context, acceptance criteria, related issue IDs, and unresolved decisions in
-the Markdown body. Distinguish agreed requirements from proposals; unanswered
-design questions are not accepted requirements.
-
 ## Update and close
 
 Read the issue with `--json` to obtain its current hash. Use
@@ -61,11 +57,4 @@ Omitted metadata stays unchanged. Omit `body` to preserve it; supplying it
 replaces the entire body. If the hash conflicts, read again and review changes
 before retrying. Do not retry a successful create: it creates another issue.
 
-Set `in_progress` when work starts, `blocked` when a concrete obstacle prevents
-progress, and `done` when acceptance criteria are met. Record blockers or
-completion evidence in the body. Use `cancelled` for work that is no longer
-wanted, with the reason. Prefer these states over deleting issue history.
-
-After writes, run `means doctor --path issues --json` and address diagnostics.
-Report affected issue IDs and changes. Keep documents and the schema in Git;
-leave the ignored `issues/.means/` cache untracked.
+Follow the status workflow and validation steps in `issues/MEANS.md`.
