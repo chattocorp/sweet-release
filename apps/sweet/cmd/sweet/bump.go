@@ -14,7 +14,7 @@ func newBumpCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bump [package...]",
 		Short: "Update versions and changelogs, then consume release notes",
-		Long:  "Prepare releases for the given package directories, or choose pending releases interactively.\nUse --all to prepare all packages. This changes local files without committing or publishing.",
+		Long:  "Prepare releases for the given package directories, or choose pending releases interactively.\nRepositories with one package select it automatically.\nUse --all to prepare all packages. This changes local files without committing or publishing.",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if all && len(args) > 0 {
@@ -101,6 +101,9 @@ func selectBumpPackages(cmd *cobra.Command, root string) ([]string, error) {
 	}
 	if len(model.options) == 0 {
 		return nil, nil
+	}
+	if len(statuses) == 1 {
+		return model.options, nil
 	}
 	if !pickerAvailable(cmd) {
 		return nil, fmt.Errorf("interactive selection requires a terminal; use sweet bump <package...> or sweet bump --all; pending packages: %s", strings.Join(model.options, ", "))
