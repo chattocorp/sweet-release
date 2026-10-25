@@ -49,7 +49,9 @@ jobs:
           # A draft is left over from a failed upload; recreate it. Keeps the tag.
           if [[ "$state" == draft ]]; then gh release delete "$TAG" --yes; fi
           go run ./apps/sweet/cmd/sweet changelog --version "$RELEASE_VERSION" -- apps/sweet > "$RUNNER_TEMP/notes.md"
+          options=()
+          if [[ "${RELEASE_VERSION%%+*}" == *-* ]]; then options+=(--prerelease); fi
           # With assets, gh creates a draft, uploads, and only then publishes.
           gh release create "$TAG" dist/*.tar.gz dist/*.zip dist/checksums.txt \
-            --verify-tag --title "Sweet Release $RELEASE_VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+            --verify-tag --title "Sweet Release $RELEASE_VERSION" --notes-file "$RUNNER_TEMP/notes.md" "${options[@]}"
           echo "Published $TAG." >> "$GITHUB_STEP_SUMMARY"

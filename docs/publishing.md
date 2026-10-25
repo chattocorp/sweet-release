@@ -19,7 +19,8 @@ upload failure leaves an unpublished draft. Rerun the failed tag workflow to
 retry. It rebuilds the assets, skips publication for an already published release,
 and recreates a leftover draft before uploading again. The tag is kept.
 
-GitHub selects Latest automatically. There is no separate promotion job.
+Versions with prerelease suffixes are marked as prereleases. GitHub selects
+Latest automatically. There is no separate promotion job.
 
 ## Local validation
 
