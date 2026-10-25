@@ -14,7 +14,7 @@ on:
       sweet-version:
         description: Sweet release tag, latest, or source for development.
         type: string
-        default: latest
+        default: sweet@0.3.0
       prepare-command:
         description: Bash commands to update lockfiles and verify changes after bumping.
         type: string

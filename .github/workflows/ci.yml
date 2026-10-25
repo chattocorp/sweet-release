@@ -16,6 +16,41 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  build-contract:
+    name: Builder asset contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      RELEASE_VERSION: 0.3.0
+      RELEASE_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build GoReleaser assets without publication
+        id: go-build
+        uses: $/.github/actions/build
+        with:
+          goreleaser: v2.18.2
+          go-version-file: apps/sweet/go.mod
+          command: test "$(dist/sweet_linux_amd64_v1/sweet --version)" = "sweet $RELEASE_VERSION"
+      - name: Verify GoReleaser asset contract
+        env:
+          ASSETS: ${{ steps.go-build.outputs.assets }}
+        run: python3 -c 'import json, os; from pathlib import Path; a=json.loads(os.environ["ASSETS"]); assert len(a)==7; assert all(Path(p).is_file() for p in a)'
+      - name: Build custom assets without publication
+        id: custom-build
+        uses: $/.github/actions/build
+        with:
+          command: |
+            mkdir -p "$RUNNER_TEMP/custom-build"
+            printf 'custom artifact\n' > "$RUNNER_TEMP/custom-build/artifact.txt"
+          assets: ${{ runner.temp }}/custom-build/*.txt
+      - name: Verify custom asset contract
+        env:
+          ASSETS: ${{ steps.custom-build.outputs.assets }}
+        run: python3 -c 'import json, os; from pathlib import Path; a=json.loads(os.environ["ASSETS"]); assert len(a)==1; assert Path(a[0]).read_text()=="custom artifact\n"'
+
   release-contract:
     name: Release contract (${{ matrix.mode }})
     permissions:
@@ -25,7 +60,7 @@ jobs:
       matrix:
         include:
           - mode: plan-only
-            command: ''
+            command: exit 99
           - mode: command
             command: |
               test "$RELEASE_PACKAGE" = apps/sweet
@@ -38,10 +73,13 @@ jobs:
     with:
       # Historical version bump: exercise real planning and exact-commit commands
       # without permission to push tags or publish anything.
+      mode: ${{ matrix.mode == 'plan-only' && 'plan' || 'release' }}
+      github-release: ${{ matrix.mode == 'plan-only' }}
+      goreleaser: ${{ matrix.mode == 'plan-only' && 'v2.18.2' || '' }}
       base: 9316cc87dfcac8b7cbeb2e407caee4279731e405
       head: 0c591e471bac87293929f0e9a1edcfc3f8a8b918
       sweet-version: source
-      push-tags: false
+      push-tags: ${{ matrix.mode == 'plan-only' }}
       release-command: ${{ matrix.command }}
 
   release-policy:
@@ -51,6 +89,7 @@ jobs:
       contents: read
     uses: ./.github/workflows/release.yml
     with:
+      mode: release
       base: 6e0540d1d474fd83577c85f3f896f43dae275b88
       head: fc9e0dea13c61edf7bdd0a04a21eca0f68a72e35
       sweet-version: source
@@ -120,14 +159,12 @@ jobs:
       - run: pnpm --dir apps/docs run build
 
   release:
-    needs: [check, docs, setup-action, release-policy, release-contract]
+    needs: [check, docs, setup-action, release-policy, release-contract, build-contract]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
     uses: ./.github/workflows/release.yml
     with:
-      base: ${{ github.event.before }}
-      head: ${{ github.sha }}
       sweet-version: source
       github-release: true
       github-latest: ${{ 'false' }}

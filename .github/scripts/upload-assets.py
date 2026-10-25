@@ -1,7 +1,5 @@
-"""Upload built assets to a verified draft; never publish from the build tool."""
+"""Publish a builder's asset list to a verified GitHub draft."""
 
-import glob
-import hashlib
 import importlib.util
 import json
 import os
@@ -12,43 +10,14 @@ release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 
 
-def assets(patterns, goreleaser, version="", commit=""):
-    paths = []
-    if goreleaser:
-        metadata = json.loads(Path("dist/metadata.json").read_text())
-        if metadata["version"] != version or metadata["commit"] != commit:
-            raise ValueError("GoReleaser output must match RELEASE_VERSION and RELEASE_COMMIT")
-        records = json.loads(Path("dist/artifacts.json").read_text())
-        for kind in ("Archive", "Checksum"):
-            selected = [Path(item["path"]) for item in records if item["type"] == kind]
-            if not selected:
-                raise ValueError(f"GoReleaser produced no {kind} artifacts")
-            paths.extend(selected)
-        for item in records:
-            if item["type"] == "Archive":
-                algorithm, expected = item["extra"]["Checksum"].split(":", 1)
-                with Path(item["path"]).open("rb") as archive:
-                    actual = hashlib.file_digest(archive, algorithm).hexdigest()
-                if actual != expected:
-                    raise ValueError(f"Archive checksum mismatch: {item['path']}")
-    for pattern in patterns.splitlines():
-        if pattern.strip():
-            matches = glob.glob(pattern.strip(), recursive=True)
-            if not matches:
-                raise ValueError(f"No assets match {pattern}")
-            paths.extend(Path(path) for path in matches)
-    result = sorted(set(path.resolve() for path in paths))
-    if any(not path.is_file() for path in result):
-        raise ValueError("Release assets must be files")
-    if len({path.name for path in result}) != len(result):
+def upload(manifest, tag, commit):
+    if not isinstance(manifest, list) or any(not isinstance(path, str) or not path for path in manifest):
+        raise ValueError("Builder assets must be a JSON array of file paths")
+    paths = [Path(path).resolve() for path in manifest]
+    if any(not path.is_file() for path in paths):
+        raise ValueError("Every release asset must be an existing file")
+    if len({path.name for path in paths}) != len(paths):
         raise ValueError("Release asset filenames must be unique")
-    return result
-
-
-def main():
-    tag, commit = os.environ["RELEASE_TAG"], os.environ["RELEASE_COMMIT"]
-    paths = assets(os.environ.get("RELEASE_ASSETS", ""), os.environ.get("GORELEASER", ""),
-                   os.environ.get("RELEASE_VERSION", ""), commit)
     if release.manage("status", tag, commit) != "draft":
         raise ValueError("Release is no longer a draft; stop before uploading")
     if paths:
@@ -56,4 +25,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    upload(json.loads(os.environ["BUILT_ASSETS"]), os.environ["RELEASE_TAG"], os.environ["RELEASE_COMMIT"])

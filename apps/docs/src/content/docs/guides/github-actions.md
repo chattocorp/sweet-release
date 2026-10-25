@@ -1,28 +1,37 @@
 ---
 title: GitHub Actions
-description: Bump release PRs and run your repository's release policy.
+description: Two shared workflows for release PRs, previews, tags, and publication.
 ---
 
-Sweet's GitHub automation has two steps:
+Sweet provides two public reusable workflows:
 
-| Workflow | Purpose |
+| Workflow | Responsibility |
 | --- | --- |
-| `bump.yml` | Bump versions and create or update release PRs. |
-| `release.yml` | Tag committed versions and optionally build assets and publish GitHub Releases. |
+| `bump.yml` | Create and update release PRs from pending change notes. |
+| `release.yml` | Preview committed releases on PRs; tag, build, and publish on main pushes. |
 
-Both workflows use GitHub-hosted Ubuntu runners and download a published Sweet
-binary by default. Consumers do not need Go or copies of Sweet's helper scripts.
-The Sweet CLI has no GitHub release behavior. The reusable workflow owns the
-optional GitHub lifecycle; callers keep their build configuration locally.
+The Sweet CLI handles versions, changelogs, and local Git tags. GitHub PRs,
+release drafts, uploads, and publication belong to these workflows, not the CLI.
 
-The examples use `@main` after these files have merged. For production, replace
-`@main` with a full commit SHA. The automation revision and CLI release tag are
-separate versions. There is no `actions-v1` tag yet. Internal action references use
-GitHub's `$/` syntax, requiring runner 2.336.0 or newer.
+## Version the integration once
+
+Each workflow revision includes a tested default CLI release, currently
+`sweet@0.3.0`. Most consumers only need to pin the workflow revision.
+`sweet-version` remains an override for testing or independent CLI upgrades.
+
+The examples use `@main` for initial setup. For production, select a published
+immutable `workflows-vX.Y.Z` tag or its full commit SHA, and use that revision
+for both workflows. Workflow tags are published separately from CLI releases;
+the first such tag must be published after this workflow version is merged.
+Do not pin an unmerged PR commit: Actions may stop resolving it after a squash
+merge and branch deletion.
+
+Internal action references use GitHub's `$/` syntax and require runner 2.336.0
+or newer. The shared workflows use GitHub-hosted Ubuntu runners.
 
 ## Bump
 
-Create `.github/workflows/bump.yml` in your repository:
+Create `.github/workflows/bump.yml` in the consumer:
 
 ```yaml
 name: Bump
@@ -36,117 +45,121 @@ permissions:
 jobs:
   bump:
     uses: chattocorp/sweet-release/.github/workflows/bump.yml@main
-    with:
-      sweet-version: apps/sweet/v0.2.0
-      strategy: per-package
     secrets:
       release-token: ${{ secrets.RELEASE_PR_TOKEN }}
 ```
 
 | Input | Default | Purpose |
 | --- | --- | --- |
-| `sweet-version` | `latest` | CLI release tag to install. |
 | `base-branch` | `main` | Source branch and PR target. |
 | `strategy` | `per-package` | Separate package PRs, or one `combined` PR. |
-| `prepare-command` | Empty | Bash commands after a bump, before PR creation. |
-| `pr-author` | Detected | Login used to identify PRs eligible for cleanup. |
+| `sweet-version` | `sweet@0.3.0` | Override the tested CLI release. |
+| `prepare-command` | Empty | Commands after a bump, before PR creation. |
+| `pr-author` | Detected | Login that owns this integration's release PRs. |
 
-The required `release-token` secret needs Contents and Pull requests write access.
-For personal tokens, the workflow detects the user through GitHub's API. For an App
-installation token, set `pr-author` to its bot login. For `GITHUB_TOKEN`, set it to
-`github-actions[bot]` and enable the repository setting that permits Actions to
-create PRs. Use a suitable personal or App token for unattended PR checks.
+The required `release-token` needs Contents and Pull requests write access.
+Use a personal or GitHub App token so the generated PRs trigger CI. Personal-token
+owners are detected; for an App token set `pr-author` to its bot login.
+With `GITHUB_TOKEN`, set `pr-author: github-actions[bot]` and enable Actions PR
+creation in repository settings, but generated PRs will not start normal CI.
 
-Cleanup only considers reserved release branches with PRs owned by that login,
-in the same repository, targeting the configured base. Other authors' open PRs are
-preserved. Changing the token owner leaves old PRs for manual review. Use one bump
-workflow and one target branch per repository: branch names are shared.
+The workflow reuses reserved release branches and only cleans up PRs owned by
+the configured author, in the same repository, against the configured base.
+Use one bump workflow and one target branch per repository. Changing token owners
+leaves older PRs for manual review.
 
-Every package job starts at the same current base commit. Up to four jobs run
-together. Cleanup waits for all jobs to succeed and stops if the base changed.
-Rerun all jobs after a failure; cleanup needs complete results from one attempt.
-Make corrections on the base branch because later runs replace generated changes.
+Up to four package jobs run together from the same base commit. Cleanup waits
+for complete successful results and skips if the base branch moved.
+After a failure, rerun all jobs; make release-content corrections on the base
+branch because later runs replace generated PR changes.
 
-Use `prepare-command: bash scripts/prepare-release.sh` to update lockfiles or run
-checks. It runs at the repository root only when the bump changed files. Its changes
-are included in the PR. `RELEASE_JOB` contains JSON with `branch`, `title`, and
-`packages`. A failed command prevents that PR's update and cleanup. The script owns
-its tool setup. Use `combined` when packages modify shared files.
+`prepare-command` runs at the repository root only when a bump changed files.
+It receives `RELEASE_JOB` JSON with `branch`, `title`, and `packages`, and owns
+any extra tool setup. Its changes join the release PR. Use `strategy: combined`
+when packages share lockfiles or other generated files.
 
-## Release
+## Preview and release with one call
 
-Call `release.yml` after your normal checks pass:
+In a CI workflow triggered by PRs and pushes to `main`, call the shared workflow
+after your checks. A Go CLI consumer needs:
 
 ```yaml
 jobs:
   # Define your normal check job above this job.
   release:
     needs: check
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
     uses: chattocorp/sweet-release/.github/workflows/release.yml@main
     with:
-      base: ${{ github.event.before }}
-      head: ${{ github.sha }}
-      sweet-version: apps/sweet/v0.2.0
-      release-command: bash scripts/release.sh
-```
-
-| Input | Default | Purpose |
-| --- | --- | --- |
-| `base` | Required | Commit before the push; all-zero SHA for a new branch. |
-| `head` | Required | Exact pushed commit that passed checks. |
-| `sweet-version` | `latest` | CLI release tag to install. |
-| `push-tags` | `true` | Create and push package tags before running commands. |
-| `release-command` | Empty | Bash command to run for each planned release. |
-| `github-release` | `false` | Prepare notes and a draft, then upload assets and publish. |
-| `github-latest` | `auto` | Let GitHub choose Latest, or explicitly use `true`/`false`. |
-| `goreleaser` | Empty | Pinned GoReleaser version, such as `v2.18.2`, for archive builds. |
-| `go-version-file` | `go.mod` | Go version file for GoReleaser builds. |
-| `goreleaser-package` | Empty | Restrict GoReleaser to one package path; other packages publish notes only. |
-| `release-assets` | Empty | Additional newline-separated file globs to upload. Each must match files. |
-
-The caller owns triggers and check dependencies. Do not cancel or coalesce main-push
-runs: every pushed range must reach release planning. Include the pushed SHA in any
-CI concurrency group. The `releases` output is a JSON array with `package`, `version`,
-`tag`, and `commit`, including matching existing tags on retries.
-
-### Tags only
-
-Omit `release-command` to create and push tags without running a publication job.
-Tags are pushed atomically; conflicts fail without force pushes or partial updates.
-If the push fails, no release commands run.
-
-Tags pushed with `GITHUB_TOKEN` do not start tag-triggered workflows. To use those
-workflows, pass a suitable GitHub App installation token or PAT as the optional
-`release-token` secret. It authenticates both checkouts/tag pushes and `GH_TOKEN`
-for commands. Without it, the workflow uses `github.token`.
-
-GitHub does not emit tag push events when more than three tags are pushed together.
-Sweet pushes the whole plan atomically, so use the command path for larger batches,
-or use `push-tags: false` and let your command implement a different push strategy.
-See GitHub's [workflow trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)
-and [push event limits](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push).
-
-### Publish GitHub Releases
-
-Set `github-release: true` to verify the remote tag, read the package name and
-changelog, and prepare a draft. After builds and uploads succeed, the workflow
-publishes the draft. Prerelease versions produce GitHub prereleases. Tags must
-exist remotely before draft preparation; normally leave `push-tags: true`.
-
-For a Go CLI, add these inputs to the shared release call:
-
-```yaml
       github-release: true
       goreleaser: v2.18.2
 ```
 
-Keep build targets, linker flags, archive names, and checksums in the caller's
-`.goreleaser.yml`. The workflow installs Go and the pinned GoReleaser binary,
-then builds in snapshot mode without GoReleaser publishing. Configure the
-snapshot version to use the version supplied by the workflow:
+No duplicate PR planner call, commit-range expressions, or CLI version input is
+needed. In the default `mode: auto`:
+
+- A PR compares its current base with GitHub's test merge commit and runs a
+  read-only preview. This also works when the PR branch is behind main; preview
+  commit IDs are provisional and main pushes are planned again. It never tags,
+  builds, uploads, or publishes, even when publication/build inputs are enabled.
+- A push to `main` uses that push's original before/after SHAs and executes the
+  plan. Only committed package version changes produce releases.
+- Other events fail with instructions to supply an explicit mode and, when
+  needed, an explicit commit range.
+
+The caller still owns triggers, permissions, and dependencies. Preserve every
+main-push run: do not cancel or coalesce them. Include the pushed SHA in the
+caller's main CI concurrency group. Obsolete PR runs may be canceled.
+
+### Execution stages
+
+1. **Plan:** Read committed metadata with `sweet git tag --dry-run`. This job
+   has read-only repository permissions and makes no tag or GitHub writes.
+2. **Tag:** Validate all planned tags, create missing annotated tags, and push
+   the entire set atomically. Conflicts never force-overwrite existing tags.
+3. **Release matrix:** Run one job per planned release at its exact commit,
+   with up to four jobs concurrently and a per-tag lock.
+
+The matrix consumes the original plan; tagging does not discover a different
+set of releases. A failed tag job prevents all publication jobs. An empty plan
+skips tagging and execution.
+
+### Release inputs
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `mode` | `auto` | Event-aware behavior; `plan` previews, `release` executes. |
+| `base`, `head` | From event | Override both with full SHAs for an explicit range. |
+| `sweet-version` | `sweet@0.3.0` | Override the tested CLI release. |
+| `push-tags` | `true` | Push the planned tags in execution mode. |
+| `github-release` | `false` | Prepare notes/draft, upload assets, and publish. |
+| `github-latest` | `auto` | Let GitHub decide Latest, or specify `true`/`false`. |
+| `goreleaser` | Empty | Optional pinned GoReleaser version. |
+| `go-version-file` | `go.mod` | Go version file for GoReleaser. |
+| `goreleaser-package` | Empty | Restrict GoReleaser to one package; others publish notes only. |
+| `release-command` | Empty | Optional build/verification command, after GoReleaser if enabled. |
+| `release-assets` | Empty | Additional newline-separated file globs; each must match files. |
+
+The optional `release-token` secret defaults to `GITHUB_TOKEN`. The read-only
+planner always uses the built-in token; the custom token authenticates tag and
+publication jobs. With GitHub publication enabled, no tag-triggered workflow or
+personal token is needed for release execution.
+
+The `releases` output is a JSON array containing `package`, `version`, `tag`,
+and `commit`, including matching existing tags on retries.
+
+For explicit recovery or historical tests, set `mode: release` and pass the
+original full `base` and `head` SHAs. `push-tags: false` disables only tagging,
+not execution; GitHub publication then requires matching tags already on the
+remote. Use `mode: plan` to guarantee a preview of the complete configuration.
+
+### Build configuration
+
+GoReleaser is an optional builder, not the GitHub publisher. Keep targets,
+linker flags, archives, and checksums in the consumer's `.goreleaser.yml`.
+The adapter installs Go and the pinned GoReleaser binary, runs a snapshot build,
+and verifies its source commit, version, and archive hashes. Set:
 
 ```yaml
 snapshot:
@@ -155,73 +168,58 @@ changelog:
   disable: true
 ```
 
-The uploader reads `dist/artifacts.json` and uploads Archive and Checksum
-artifacts. At least one of each is required. It verifies the build version, source
-commit, and archive hashes before upload. Other GoReleaser artifact types are not
-uploaded automatically; use `release-assets` for additional files. GoReleaser's
-release and changelog settings do not control the GitHub lifecycle.
+The adapter selects Archive and Checksum entries from `dist/artifacts.json`;
+at least one of each is required. Select other outputs with `release-assets`.
 
-For other build systems, use `release-command` to build files and `release-assets`
-to select them. With no build or assets, the workflow publishes release notes only.
-If both GoReleaser and a command are set, the command runs after GoReleaser and
-before uploads, so it can verify binaries or prepare extra files.
+For other build systems, supply `release-command` and `release-assets`.
+Commands run from the repository root at the exact release commit and own extra
+tool setup. The script must exist at that commit. Both builders return the same
+internal JSON list of asset paths; the publisher does not parse build-tool metadata.
+With no builder or assets, the workflow can publish release notes only.
 
-Build or upload failures leave the draft unpublished. Rerunning the original CI
-run refreshes the draft and replaces matching assets. Already-published releases
-skip all builds, commands, uploads, and publication. A moved or deleted remote
-tag stops mutations. Do not mutate the same release outside the workflow while
-it is running; the concurrency lock only coordinates workflow jobs.
+Commands receive `RELEASE_PACKAGE`, `RELEASE_VERSION`, `RELEASE_TAG`,
+`RELEASE_COMMIT`, `GH_REPO`, and `GH_TOKEN`. Sweet is installed.
+With `github-release: true`, commands should build/verify files; the workflow
+handles publication. Without it, commands may implement their own deployment
+policy and must be safe to repeat.
 
-No tag-triggered publishing workflow is needed. The built-in `GITHUB_TOKEN` is
-sufficient for this path, while Bump still needs a token that can trigger PR CI.
+### Tags only
 
-### Run a release command
+Leave `github-release`, `goreleaser`, and `release-command` unset to push tags
+without publication. If another workflow reacts to those tags, supply a suitable
+App token or PAT through `release-token`: tags pushed with `GITHUB_TOKEN` do not
+start push-triggered workflows. GitHub also suppresses tag-push events when more
+than three tags are pushed together; use the direct publication path for larger batches.
 
-The command runs from the repository root at the exact commit that introduced the
-package version. A script referenced by a relative path must exist at that commit.
-Sweet is installed, and these environment variables are available:
+### Results and retries
 
-| Variable | Value |
-| --- | --- |
-| `RELEASE_PACKAGE` | Package directory, relative to the repository root. |
-| `RELEASE_VERSION` | Released version. |
-| `RELEASE_TAG` | Planned tag name. |
-| `RELEASE_COMMIT` | Full commit SHA. |
-| `GH_REPO` | Caller repository (`owner/name`). |
-| `GH_TOKEN` | Release token, or the built-in GitHub token. |
+Job summaries show the planned releases, preview/no-op outcomes, publication links,
+already-published skips, and the failed stage with retry instructions.
 
-The script installs any additional tools it needs. For example, it can select a
-package build using `RELEASE_PACKAGE`, upload artifacts, or create a GitHub Release.
-Without `github-release`, the command owns any publication policy. With it,
-the workflow prepares the draft before the command and uploads/publishes after
-the command succeeds; the command should only build or verify files.
+Build/upload failures leave drafts unpublished. Rerun the original CI run to retain
+its commit range. Matching tags and drafts are reused, partial uploads are replaced,
+and published releases skip builds and mutations. API errors and moved/deleted tags
+stop publication. Jobs have a 30-minute execution limit and do not cancel other
+packages on failure. Do not modify the same release outside the workflow while it
+runs; its concurrency lock only coordinates workflow jobs.
 
-Set `push-tags: false` when your command owns tagging or does not need tags. Sweet
-still fetches existing tags and validates the plan, but creates no local or remote
-tags. `RELEASE_TAG` remains the planned name; it need not exist.
+## Maintaining this integration
 
-Up to four release jobs run concurrently. Each job has a 30-minute timeout, and
-commands for the same tag share the `sweet-github-release-<tag>` concurrency group.
-A command or pipeline failure fails that job without cancelling other packages.
-Rerun the original workflow to retry its original range. Existing tags do not
-suppress commands, but published GitHub Releases do when `github-release` is enabled.
-**Make your script safe to repeat** after a partial failure. Sweet cannot guarantee
-exactly-once publication for arbitrary commands.
+The two public entry points stay `bump.yml` and `release.yml`. Internal actions
+and scripts separate planning/tagging, building, and GitHub publication. Their
+paths and outputs are not separate supported consumer APIs.
 
-## Sweet's own release policy
+The repository's **Publish workflow version** maintenance workflow is manually
+dispatched from `main` with a version such as `1.0.0`. It requires successful
+main CI for the exact dispatched commit and creates an immutable
+`workflows-v1.0.0` tag. It does not create a CLI release or change GitHub Latest.
+Existing tags cannot be moved. Publish the tag after merging, then pin consumers
+to that tag or its merged commit SHA.
 
-This repository calls `bump.yml` from `prepare-releases.yml` and `release.yml` from
-CI, using `sweet-version: source` to exercise unreleased CLI code. That development
-option builds from the automation revision and requires Go.
+When changing the CLI default, update both workflow defaults and the bootstrap
+default together, verify the integration, then publish a new workflow version.
+Consumers retain the old tested combination until they update their pin.
 
-Our caller enables `github-release` and GoReleaser for `apps/sweet`. Its optional
-command checks the binary version and checksums. Other packages publish notes only.
-There is no repository-specific GitHub lifecycle script. Published retries skip the build.
-After a successful release run, a serialized job promotes the
-highest stable CLI release to Latest. Rerun a failed release run to finish publication
-and promotion.
-
-The workflows share one internal bootstrap action under `.github/actions/`, which
-installs Sweet and locates the internal scripts under `.github/scripts/`. Binary
-downloads are checked against SHA-256 checksums and the executable's version.
-These helpers are implementation details; consumers call `bump.yml` and `release.yml`.
+Sweet itself uses `sweet-version: source` to test unreleased CLI code. Its caller
+selects GoReleaser for `apps/sweet`, verifies the resulting binary, and separately
+promotes the highest stable CLI release to Latest.

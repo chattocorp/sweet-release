@@ -14,10 +14,11 @@ binary version and SHA-256 checksums before the shared uploader runs.
 
 The shared workflow checks out each exact release commit, verifies the remote
 tag, and prepares a draft from its package name and versioned changelog.
-It installs GoReleaser through its official action, builds, then uploads Archive
-and Checksum entries from `dist/artifacts.json`. The uploader checks the recorded
-version and commit, verifies archive hashes, and rechecks the remote tag and draft
-state. Publication runs only after every preceding step succeeds.
+The internal build action installs GoReleaser through its official action and
+checks the recorded version, commit, and archive hashes. It returns a JSON list
+of Archive and Checksum paths selected from `dist/artifacts.json`, plus custom
+assets. The GitHub uploader only receives that list of files and rechecks the
+remote tag and draft state. Publication runs only after every preceding step succeeds.
 
 Jobs for the same tag are serialized. A build/upload failure leaves the draft
 unpublished. Rerun the original CI run to preserve its commit range: retries reuse

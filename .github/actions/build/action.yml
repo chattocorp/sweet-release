@@ -1,0 +1,48 @@
+name: Build release assets
+description: Internal GoReleaser/custom builder; returns asset paths without publishing.
+inputs:
+  goreleaser:
+    description: Optional pinned GoReleaser version.
+    default: ''
+  go-version-file:
+    description: Go version file for GoReleaser.
+    default: go.mod
+  command:
+    description: Optional build or verification command after GoReleaser.
+    default: ''
+  assets:
+    description: Additional newline-separated asset globs.
+    default: ''
+outputs:
+  assets:
+    description: JSON array of absolute file paths, shared by all builders.
+    value: ${{ steps.collect.outputs.assets }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v7
+      if: inputs.goreleaser != ''
+      with:
+        go-version-file: ${{ inputs.go-version-file }}
+    - uses: goreleaser/goreleaser-action@v7
+      if: inputs.goreleaser != ''
+      with:
+        version: ${{ inputs.goreleaser }}
+        args: release --snapshot --clean
+      env:
+        GORELEASER_CURRENT_TAG: v${{ env.RELEASE_VERSION }}
+    - name: Run project build or verification
+      if: inputs.command != ''
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        RELEASE_COMMAND: ${{ inputs.command }}
+      run: bash "$ACTION_PATH/../../scripts/release-command.sh"
+    - id: collect
+      name: Collect built assets
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        GORELEASER: ${{ inputs.goreleaser }}
+        RELEASE_ASSETS: ${{ inputs.assets }}
+      run: python3 "$ACTION_PATH/../../scripts/build-assets.py"

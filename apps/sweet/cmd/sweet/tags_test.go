@@ -26,15 +26,15 @@ func TestTagPlannerProcess(t *testing.T) {
 
 func TestTagWorkflowWithLocalRemote(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("workflow uses Bash on Linux")
+		t.Skip("workflow uses Unix runners")
 	}
-	for _, tool := range []string{"bash", "jq"} {
+	for _, tool := range []string{"python3"} {
 		if _, err := exec.LookPath(tool); err != nil {
 			t.Skipf("requires %s", tool)
 		}
 	}
 	_, source, _, _ := runtime.Caller(0)
-	script := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/tag-releases.sh")
+	script := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/release-plan.py")
 	root, remote := t.TempDir(), t.TempDir()
 	git := func(dir string, args ...string) string {
 		t.Helper()
@@ -83,10 +83,20 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 	invoke := func(base, head string, fail bool) {
 		t.Helper()
 		output := filepath.Join(t.TempDir(), "output")
-		cmd := exec.Command("bash", script, wrapper, base, head)
+		cmd := exec.Command("python3", script, "plan", wrapper)
 		cmd.Dir = root
-		cmd.Env = append(os.Environ(), "SWEET_TAG_TEST_PROCESS=1", "SWEET_TEST_BINARY="+bin, "GITHUB_STEP_SUMMARY=", "GITHUB_OUTPUT="+output)
+		cmd.Env = append(os.Environ(), "SWEET_TAG_TEST_PROCESS=1", "SWEET_TEST_BINARY="+bin, "GITHUB_STEP_SUMMARY=", "GITHUB_OUTPUT="+output, "BASE="+base, "HEAD="+head, "MODE=plan")
 		out, err := cmd.CombinedOutput()
+		if err == nil && os.Getenv("PUSH_TAGS") != "false" {
+			data, readErr := os.ReadFile(output)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			apply := exec.Command("python3", script, "tag")
+			apply.Dir = root
+			apply.Env = append(os.Environ(), "GITHUB_STEP_SUMMARY=", "RELEASES="+strings.TrimPrefix(strings.TrimSpace(string(data)), "releases="))
+			out, err = apply.CombinedOutput()
+		}
 		if (err != nil) != fail {
 			t.Fatalf("tag workflow: %v: %s", err, out)
 		}

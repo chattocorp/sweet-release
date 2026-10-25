@@ -3,7 +3,8 @@
 On pushes to `main`, CI calls `.github/workflows/release.yml` after all checks
 succeed, with
 `sweet-version: source`. The shared workflow checks out the exact pushed SHA,
-fetches tags, and runs the tag planner through `.github/scripts/tag-releases.sh`.
+fetches tags, and invokes `.github/scripts/release-plan.py` in read-only planning
+mode. The separate tag job validates and applies that exact plan atomically.
 It returns all package releases and runs the configured `release-command` for each
 one at its exact commit. Our caller enables the shared GitHub release lifecycle
 and selects `apps/sweet` for GoReleaser builds. External callers can
@@ -50,8 +51,8 @@ are not backfilled. Manual version edits on main are treated like prepared relea
 Tag names must be valid Git refs. A package can set `tag-prefix` in `.sweet.yml`
 to override the literal text before its version.
 
-The script invokes `sweet git tag --base <before-sha> --head <after-sha> --json`
-to create annotated tags, then pushes only the planned refs with
+The planner invokes `sweet git tag --base <before-sha> --head <after-sha> --dry-run --json`.
+The tag job creates missing annotated tags from that plan, then pushes only its refs with
 `git push --atomic`. Matching existing tags are retained, including lightweight
 tags. A tag targeting another commit or a version reused within the range stops
 the operation. Tags are never moved or overwritten. If a remote rejects any tag,

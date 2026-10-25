@@ -132,10 +132,23 @@ class ReleaseIntegrationTests(unittest.TestCase):
         self.action("draft", success=False, FAKE_GH_FAILURE="api")
         self.assertFalse(self.mutations())
         self.assertFalse((self.root / "release.json").exists())
+
     def upload(self, success=True, **extra):
+        # Run the builder adapter and pass only its JSON asset list to the publisher.
+        result_path = self.root / "build-output"
+        result_path.unlink(missing_ok=True)
+        built = subprocess.run([sys.executable, str(SCRIPTS / "build-assets.py")],
+                               cwd=self.repo, env=dict(self.env, GITHUB_OUTPUT=str(result_path),
+                               RELEASE_COMMIT=self.commit, RELEASE_VERSION="0.1.0", **extra),
+                               capture_output=True, text=True)
+        if built.returncode:
+            self.assertFalse(success, built.stderr)
+            return built
+        manifest = result_path.read_text().removeprefix("assets=").strip()
         result = subprocess.run([sys.executable, str(SCRIPTS / "upload-assets.py")],
                                 cwd=self.repo, env=dict(self.env, RELEASE_TAG=self.tag,
-                                RELEASE_COMMIT=self.commit, RELEASE_VERSION="0.1.0", **extra), capture_output=True, text=True)
+                                RELEASE_COMMIT=self.commit, BUILT_ASSETS=manifest,
+                                FAKE_GH_FAILURE=extra.get("FAKE_GH_FAILURE", "")), capture_output=True, text=True)
         self.assertEqual(result.returncode == 0, success, result.stderr)
         return result
 
@@ -192,6 +205,37 @@ class ReleaseIntegrationTests(unittest.TestCase):
         self.action("publish")
         self.assertFalse(self.record()["isDraft"])
         self.assertFalse(self.record()["assets"])
+
+    def test_tag_stage_applies_frozen_plan_without_replanning(self):
+        self.git("checkout", "--detach", self.later)
+        planned = [{"package": ".", "version": "0.1.0", "tag": "frozen@0.1.0", "commit": self.commit}]
+        subprocess.run([sys.executable, str(SCRIPTS / "release-plan.py"), "tag"],
+                       cwd=self.repo, env=dict(self.env, RELEASES=json.dumps(planned)),
+                       check=True, capture_output=True)
+        target = subprocess.check_output(["git", "--git-dir", str(self.remote), "rev-parse",
+                                          "refs/tags/frozen@0.1.0^{commit}"], text=True).strip()
+        self.assertEqual(target, self.commit)
+        self.assertNotIn("v0.2.0", self.git("tag", "--list"))
+
+    def test_pr_merge_preview_when_source_branch_is_behind_main(self):
+        self.git("checkout", "-b", "feature", self.later)
+        (self.repo / ".sweet.yml").write_text("name: Example API\nversion: 0.3.0\n")
+        self.git("add", ".")
+        self.git("commit", "-m", "Release feature")
+        self.git("checkout", "main")
+        (self.repo / "README.md").write_text("Concurrent main change\n")
+        self.git("add", ".")
+        self.git("commit", "-m", "Advance main")
+        base = self.git("rev-parse", "HEAD")
+        self.git("merge", "--no-ff", "feature", "-m", "Test merge")
+        merge = self.git("rev-parse", "HEAD")
+        output = self.root / "plan-output"
+        subprocess.run([sys.executable, str(SCRIPTS / "release-plan.py"), "plan", str(Path(self.build.name) / "sweet")],
+                       cwd=self.repo, env=dict(self.env, BASE=base, HEAD=merge, MODE="plan", GITHUB_OUTPUT=str(output)),
+                       check=True, capture_output=True)
+        planned = json.loads(output.read_text().removeprefix("releases="))
+        self.assertEqual([(item["version"], item["commit"]) for item in planned], [("0.3.0", merge)])
+        self.assertNotIn("v0.3.0", self.git("tag", "--list"))
 
     def test_duplicate_asset_names_fail_before_upload(self):
         self.action("draft")
