@@ -1,0 +1,53 @@
+name: Publish workflow version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Immutable workflow version, for example 1.0.0 (creates workflows-v1.0.0).
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: workflow-version-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require a version dispatched from main
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Require successful main CI for this exact commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          passed=$(gh run list --workflow ci.yml --branch main --event push --commit "$GITHUB_SHA" --json conclusion --jq 'any(.[]; .conclusion == "success")')
+          [[ "$passed" == true ]] || { echo 'Wait for main CI to pass, then rerun this workflow.'; exit 1; }
+      - name: Publish immutable workflow tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          tag="workflows-v$VERSION"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git show-ref --verify --quiet "refs/tags/$tag"; then
+            [[ "$(git rev-parse "refs/tags/$tag^{commit}")" == "$GITHUB_SHA" ]]
+          else
+            git tag -a "$tag" "$GITHUB_SHA" -m "Sweet workflows $VERSION"
+          fi
+          git push origin "refs/tags/$tag:refs/tags/$tag"
+          echo "Published immutable workflow version: $tag at $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

@@ -12,9 +12,9 @@ on:
         type: string
         default: per-package
       sweet-version:
-        description: Sweet release tag, latest, or source for development.
+        description: Sweet release tag, latest, or source to build the CLI from this workflow revision.
         type: string
-        default: latest
+        default: source
       prepare-command:
         description: Bash commands to update lockfiles and verify changes after bumping.
         type: string

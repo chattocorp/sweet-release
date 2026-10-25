@@ -1,0 +1,49 @@
+name: Tag
+
+on:
+  workflow_call:
+    inputs:
+      sweet-version:
+        description: Sweet release tag, latest, or source to build the CLI from this workflow revision.
+        type: string
+        default: source
+    secrets:
+      release-token:
+        description: Token with contents write access. Tags pushed with GITHUB_TOKEN do not trigger tag workflows.
+        required: true
+    outputs:
+      tags:
+        description: JSON array of package, version, tag, and commit, including matching existing tags on retries.
+        value: ${{ jobs.tag.outputs.tags }}
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tags: ${{ steps.tags.outputs.tags }}
+    steps:
+      - name: Require a branch push
+        if: github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/')
+        run: |
+          echo 'Call this workflow from a branch push; it tags the pushed commit range.'
+          exit 1
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          token: ${{ secrets.release-token }}
+      - id: tooling
+        uses: $/.github/actions/bootstrap
+        with:
+          sweet-version: ${{ inputs.sweet-version }}
+      - name: Create and push release tags
+        id: tags
+        env:
+          BASE: ${{ github.event.before }}
+          HEAD: ${{ github.sha }}
+          SCRIPTS: ${{ steps.tooling.outputs.scripts }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          bash "$SCRIPTS/tag-releases.sh" "$BASE" "$HEAD"

@@ -1,43 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-sweet=$1
-base=$2
-head=$3
-push_tags=${PUSH_TAGS:-true}
-case "$push_tags" in
-  true|false) ;;
-  *) echo 'PUSH_TAGS must be true or false.' >&2; exit 1 ;;
-esac
+base=$1
+head=$2
 
-# A fresh checkout plus all remote tags makes reruns safe. Never force-fetch tags.
+# Remote tags must be present for Sweet's conflict checks. Never force-fetch.
 git fetch origin --tags
-args=(git tag --base "$base" --head "$head" --json)
-if [[ "$push_tags" == false ]]; then args+=(--dry-run); fi
-plan=$("$sweet" "${args[@]}")
+# Sweet validates the whole range before creating any missing annotated tags.
+plan=$(sweet git tag --base "$base" --head "$head" --json)
 
-refs=()
-while IFS=$'\t' read -r name _commit _exists; do
-  # Include matching local tags too, so retrying a rejected push can finish.
-  refs+=("refs/tags/$name:refs/tags/$name")
-done < <(jq -r '.[] | [.name, .commit, .exists] | @tsv' <<< "$plan")
-
-if [[ "$push_tags" == false ]]; then
-  echo 'Tag creation and pushing disabled.'
-elif (( ${#refs[@]} )); then
-  # Push only this plan's tags, all together. No force pushes or partial releases.
-  git push --atomic origin "${refs[@]}"
-else
-  echo 'No new release tags.'
-fi
+# Push one tag at a time: GitHub creates no push events when more than three
+# tags arrive together. Matching remote tags are no-ops, so reruns finish a
+# partially pushed range. Never force-push.
+while IFS= read -r name; do
+  git push origin "refs/tags/$name:refs/tags/$name"
+done < <(jq -r '.[].name' <<< "$plan")
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-  printf 'releases=%s\n' "$(jq -c '[.[] | {package, version, tag: .name, commit}]' <<< "$plan")" >> "$GITHUB_OUTPUT"
+  printf 'tags=%s\n' "$(jq -c '[.[] | {package, version, tag: .name, commit}]' <<< "$plan")" >> "$GITHUB_OUTPUT"
 fi
 
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
   {
-    printf '## Planned releases\n\n'
-    jq -r '.[] | "- `\(.name)` → `\(.commit)`"' <<< "$plan"
+    printf '## Release tags\n\n'
+    jq -r 'if length == 0 then "No committed version changes." else .[] | "- `\(.name)` → `\(.commit)`" end' <<< "$plan"
   } >> "$GITHUB_STEP_SUMMARY"
 fi

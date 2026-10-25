@@ -16,49 +16,6 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  release-contract:
-    name: Release contract (${{ matrix.mode }})
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - mode: plan-only
-            command: ''
-          - mode: command
-            command: |
-              test "$RELEASE_PACKAGE" = apps/sweet
-              test "$RELEASE_VERSION" = 0.2.0
-              test -n "$RELEASE_TAG"
-              test "$RELEASE_COMMIT" = 0c591e471bac87293929f0e9a1edcfc3f8a8b918
-              test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
-              sweet status --json
-    uses: ./.github/workflows/release.yml
-    with:
-      # Historical version bump: exercise real planning and exact-commit commands
-      # without permission to push tags or publish anything.
-      base: 9316cc87dfcac8b7cbeb2e407caee4279731e405
-      head: 0c591e471bac87293929f0e9a1edcfc3f8a8b918
-      sweet-version: source
-      push-tags: false
-      release-command: ${{ matrix.command }}
-
-  release-policy:
-    name: Published release retry
-    # This exercises published-release retries without permission to mutate releases.
-    permissions:
-      contents: read
-    uses: ./.github/workflows/release.yml
-    with:
-      base: 6e0540d1d474fd83577c85f3f896f43dae275b88
-      head: fc9e0dea13c61edf7bdd0a04a21eca0f68a72e35
-      sweet-version: source
-      github-release: true
-      push-tags: false
-      # The matching tag exists: planning must not push; publication must skip.
-      release-command: exit 99
-
   setup-action:
     name: Install released CLI (${{ matrix.os }})
     strategy:
@@ -119,41 +76,12 @@ jobs:
       - run: pnpm --dir apps/docs run check
       - run: pnpm --dir apps/docs run build
 
-  release:
-    needs: [check, docs, setup-action, release-policy, release-contract]
+  tag:
+    needs: [check, docs, setup-action]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
-    uses: ./.github/workflows/release.yml
-    with:
-      base: ${{ github.event.before }}
-      head: ${{ github.sha }}
-      sweet-version: source
-      github-release: true
-      github-latest: ${{ 'false' }}
-      goreleaser: v2.18.2
-      goreleaser-package: apps/sweet
-      go-version-file: apps/sweet/go.mod
-      release-command: |
-        if [[ "$RELEASE_PACKAGE" == apps/sweet ]]; then
-          test "$(dist/sweet_linux_amd64_v1/sweet --version)" = "sweet $RELEASE_VERSION"
-          (cd dist && sha256sum --check checksums.txt)
-        fi
-
-  promote-latest:
-    needs: release
-    if: needs.release.outputs.releases != '[]'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    concurrency:
-      group: promote-latest-cli
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v7
-      - name: Promote highest stable CLI release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: python3 .github/scripts/promote-latest.py
+    uses: ./.github/workflows/tag.yml
+    secrets:
+      # A personal or App token, so the pushed tags trigger release-cli.yml.
+      release-token: ${{ secrets.RELEASE_PR_TOKEN }}
