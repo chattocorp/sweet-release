@@ -1,5 +1,11 @@
 # Sweet Release Changelog
 
+## 0.4.0
+
+### Fixes
+
+- Keep changelog source attribution inline after the final paragraph of multi-paragraph prose notes. Preserve paragraph breaks and keep attribution separate for structured Markdown such as code blocks, lists, and tables. ([#48](https://github.com/chattocorp/sweet-release/pull/48))
+
 ## 0.3.0
 
 ### Fixes
