@@ -169,8 +169,11 @@ func TestSourceLinkWrappedParagraph(t *testing.T) {
 	}
 }
 
-func TestSourceLinkWrappedInlineCode(t *testing.T) {
+func TestSourceLinkProse(t *testing.T) {
 	for _, body := range []string{
+		"First paragraph.\n\nSecond paragraph.",
+		"First paragraph.\n \t\nSecond paragraph with\n`inline code` and a wrapped final line.",
+		"First paragraph.\n\nSecond paragraph.\n\nFinal paragraph.",
 		"Create missing annotated local tags. Use\n`--dry-run` to preview, `--json` for automation, and `--base` with `--head` to\nselect an explicit commit range. Tags are never pushed or overwritten.",
 		"The Go module is now\n`github.com/chattocorp/sweet-release/apps/sweet`; core imports use its `/core`\nsubpackage.",
 		"Read the latest released changes, or use\n`--version <version>` to select a release.",
@@ -184,6 +187,7 @@ func TestSourceLinkWrappedInlineCode(t *testing.T) {
 				prefix += "⚠️ **BREAKING CHANGE:** "
 			}
 			want := "## 1.1.0\n\n### Features\n\n" + prefix + strings.ReplaceAll(body, "\n", "\n  ") + " (source)\n"
+			want = strings.ReplaceAll(want, "\n  \n", "\n\n")
 			if got != want {
 				t.Fatalf("body %q, breaking=%v: got %q, want %q", body, breaking, got, want)
 			}
@@ -193,13 +197,16 @@ func TestSourceLinkWrappedInlineCode(t *testing.T) {
 
 func TestSourceLinkStructuredMarkdown(t *testing.T) {
 	for _, body := range []string{
-		"First paragraph.\n\nSecond paragraph.",
+		"First paragraph.\n\nExample:\n```go\nCall()\n```",
+		"First paragraph.\n\nItems:\n- First\n- Second",
+		"First paragraph.\n\n| Column |\n| --- |\n| Value |",
 		"Example:\n```go\nCall()\n```",
 		"Example:\n````go\nCall()\n````",
 		"Example:\n~~~go\nCall()\n~~~",
 		"Items:\n- First\n- Second",
 		"Heading\n=======",
 		"Example:\n\n    Call()",
+		"Example:\n```go\n\nCall()",
 		"| Column |\n| --- |\n| Value |",
 	} {
 		status := PackageStatus{NextVersion: "1.1.0", Changes: []Change{{Path: "note", Type: "feature", Body: body}}}

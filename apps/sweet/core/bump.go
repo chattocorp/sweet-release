@@ -254,7 +254,7 @@ func releaseEntryWithLinks(status PackageStatus, types []ChangeType, links map[s
 			if body != "" {
 				lines := strings.Split(body, "\n")
 				if link := links[change.Path]; link != "" {
-					if len(lines) == 1 || isWrappedParagraph(body) {
+					if len(lines) == 1 || isProse(body) {
 						last := len(lines) - 1
 						lines[last] = strings.TrimRight(lines[last], " \t\r") + " (" + link + ")"
 					} else {
@@ -282,11 +282,15 @@ func releaseEntryWithLinks(status PackageStatus, types []ChangeType, links map[s
 	return out.String()
 }
 
-// Keep soft-wrapped prose inline, but leave structured Markdown untouched.
-func isWrappedParagraph(body string) bool {
+// Keep attribution inline for prose, including multiple soft-wrapped paragraphs,
+// but leave structured Markdown untouched.
+func isProse(body string) bool {
 	for _, line := range strings.Split(body, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t") ||
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t") ||
 			strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") ||
 			strings.ContainsAny(trimmed[:1], "#>|<[") || changelogListMarker.MatchString(trimmed) ||
 			strings.Trim(trimmed, "-*_ =\t") == "" {
