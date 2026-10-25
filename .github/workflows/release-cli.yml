@@ -1,0 +1,55 @@
+name: Release CLI
+
+on:
+  push:
+    tags: ['sweet@*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/sweet/go.mod
+          cache-dependency-path: apps/sweet/go.sum
+      - name: Read release version
+        run: echo "RELEASE_VERSION=${TAG#sweet@}" >> "$GITHUB_ENV"
+      # Snapshot mode lets GoReleaser build from our prefixed tags; it never publishes.
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: v2.18.2
+          args: release --snapshot --clean
+        env:
+          GORELEASER_CURRENT_TAG: v${{ env.RELEASE_VERSION }}
+      - name: Verify archives
+        run: |
+          test "$(dist/sweet_linux_amd64_v1/sweet --version)" = "sweet $RELEASE_VERSION"
+          (cd dist && sha256sum --check checksums.txt)
+      - name: Publish GitHub Release
+        run: |
+          state=$(gh release view "$TAG" --json isDraft --jq 'if .isDraft then "draft" else "published" end' 2>/dev/null || echo missing)
+          if [[ "$state" == published ]]; then
+            echo "$TAG is already published." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # A draft is left over from a failed upload; recreate it. Keeps the tag.
+          if [[ "$state" == draft ]]; then gh release delete "$TAG" --yes; fi
+          go run ./apps/sweet/cmd/sweet changelog --version "$RELEASE_VERSION" -- apps/sweet > "$RUNNER_TEMP/notes.md"
+          # With assets, gh creates a draft, uploads, and only then publishes.
+          gh release create "$TAG" dist/*.tar.gz dist/*.zip dist/checksums.txt \
+            --verify-tag --title "Sweet Release $RELEASE_VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+          echo "Published $TAG." >> "$GITHUB_STEP_SUMMARY"

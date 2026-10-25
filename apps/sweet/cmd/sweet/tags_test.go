@@ -28,13 +28,13 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("workflow uses Unix runners")
 	}
-	for _, tool := range []string{"python3"} {
+	for _, tool := range []string{"bash", "jq"} {
 		if _, err := exec.LookPath(tool); err != nil {
 			t.Skipf("requires %s", tool)
 		}
 	}
 	_, source, _, _ := runtime.Caller(0)
-	script := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/release-plan.py")
+	script := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/tag-releases.sh")
 	root, remote := t.TempDir(), t.TempDir()
 	git := func(dir string, args ...string) string {
 		t.Helper()
@@ -78,25 +78,16 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wrapper := filepath.Join(t.TempDir(), "sweet")
-	write(wrapper, "#!/bin/sh\nexec \"$SWEET_TEST_BINARY\" -test.run='^TestTagPlannerProcess$' -- \"$@\"\n")
+	bindir := t.TempDir()
+	write(filepath.Join(bindir, "sweet"), "#!/bin/sh\nexec \"$SWEET_TEST_BINARY\" -test.run='^TestTagPlannerProcess$' -- \"$@\"\n")
 	invoke := func(base, head string, fail bool) {
 		t.Helper()
 		output := filepath.Join(t.TempDir(), "output")
-		cmd := exec.Command("python3", script, "plan", wrapper)
+		cmd := exec.Command("bash", script, base, head)
 		cmd.Dir = root
-		cmd.Env = append(os.Environ(), "SWEET_TAG_TEST_PROCESS=1", "SWEET_TEST_BINARY="+bin, "GITHUB_STEP_SUMMARY=", "GITHUB_OUTPUT="+output, "BASE="+base, "HEAD="+head, "MODE=plan")
+		cmd.Env = append(os.Environ(), "PATH="+bindir+string(os.PathListSeparator)+os.Getenv("PATH"),
+			"SWEET_TAG_TEST_PROCESS=1", "SWEET_TEST_BINARY="+bin, "GITHUB_STEP_SUMMARY=", "GITHUB_OUTPUT="+output)
 		out, err := cmd.CombinedOutput()
-		if err == nil && os.Getenv("PUSH_TAGS") != "false" {
-			data, readErr := os.ReadFile(output)
-			if readErr != nil {
-				t.Fatal(readErr)
-			}
-			apply := exec.Command("python3", script, "tag")
-			apply.Dir = root
-			apply.Env = append(os.Environ(), "GITHUB_STEP_SUMMARY=", "RELEASES="+strings.TrimPrefix(strings.TrimSpace(string(data)), "releases="))
-			out, err = apply.CombinedOutput()
-		}
 		if (err != nil) != fail {
 			t.Fatalf("tag workflow: %v: %s", err, out)
 		}
@@ -105,30 +96,20 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var releases []struct{ Package, Version, Tag, Commit string }
-			if err := json.Unmarshal([]byte(strings.TrimPrefix(strings.TrimSpace(string(data)), "releases=")), &releases); err != nil {
+			var tags []struct{ Package, Version, Tag, Commit string }
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(strings.TrimSpace(string(data)), "tags=")), &tags); err != nil {
 				t.Fatal(err)
 			}
-			if len(releases) != 8 {
-				t.Fatalf("wrong publish matrix: %s", data)
+			if len(tags) != 8 {
+				t.Fatalf("wrong tag list: %s", data)
 			}
-			for _, release := range releases {
-				if release.Package == "" || release.Version == "" || !strings.HasSuffix(release.Tag, release.Version) || release.Commit != head {
-					t.Fatalf("incomplete release metadata: %s", data)
+			for _, tag := range tags {
+				if tag.Package == "" || tag.Version == "" || !strings.HasSuffix(tag.Tag, tag.Version) || tag.Commit != head {
+					t.Fatalf("incomplete tag metadata: %s", data)
 				}
 			}
 		}
 	}
-	// Planning without tags must retain the release matrix and mutate no refs.
-	t.Setenv("PUSH_TAGS", "false")
-	invoke(base, head, false)
-	if got := git(root, "tag", "--list"); got != "" {
-		t.Fatalf("planning created local tags: %s", got)
-	}
-	if got := git(remote, "tag", "--list"); got != "" {
-		t.Fatalf("planning pushed tags: %s", got)
-	}
-	t.Setenv("PUSH_TAGS", "true")
 	invoke(base, head, false)
 	for _, name := range []string{"v0.1.0", "api@0.1.0"} {
 		if got := git(remote, "rev-parse", "refs/tags/"+name+"^{commit}"); got != head {
@@ -148,17 +129,14 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 	before = git(remote, "show-ref", "--tags")
 	invoke(head, next, true)
 	if got := git(remote, "show-ref", "--tags"); got != before {
-		t.Fatal("conflicting tag caused a partial push")
+		t.Fatal("conflicting tag pushed other tags")
 	}
 	git(remote, "tag", "-d", "api@0.2.0")
 	git(root, "tag", "-d", "api@0.2.0")
-	before = git(remote, "show-ref", "--tags")
+	// Tags are pushed one at a time, so a rejection can leave a partial push.
 	hook := filepath.Join(remote, "hooks/update")
 	write(hook, "#!/bin/sh\nif [ \"$1\" = refs/tags/api@0.2.0 ]; then exit 1; fi\n")
 	invoke(head, next, true)
-	if got := git(remote, "show-ref", "--tags"); got != before {
-		t.Fatal("remote rejection caused a partial tag push")
-	}
 	if err := os.Remove(hook); err != nil {
 		t.Fatal(err)
 	}

@@ -1,15 +1,11 @@
 # Version tags
 
-On pushes to `main`, CI calls `.github/workflows/release.yml` after all checks
-succeed, with
-`sweet-version: source`. The shared workflow checks out the exact pushed SHA,
-fetches tags, and invokes `.github/scripts/release-plan.py` in read-only planning
-mode. The separate tag job validates and applies that exact plan atomically.
-It returns all package releases and runs the configured `release-command` for each
-one at its exact commit. Our caller enables the shared GitHub release lifecycle
-and selects `apps/sweet` for GoReleaser builds. External callers can
-omit the command for tags only, or set `push-tags: false` to plan releases without
-creating tags and let their command handle all publication policy.
+On pushes to `main`, CI calls `.github/workflows/tag.yml` after all checks
+succeed. The shared workflow builds Sweet from its own revision by default,
+checks out the exact pushed SHA, fetches tags, and invokes
+`.github/scripts/tag-releases.sh` with the push's before and after SHAs.
+It creates and pushes package tags and returns their metadata as JSON.
+Separate workflows triggered by those tags own builds and publication.
 Pull requests, other branches,
 and manual CI dispatches do not create tags. Each main push has its own concurrency
 group so a later push cannot cancel a range before tagging. Separate runs can push
@@ -51,17 +47,19 @@ are not backfilled. Manual version edits on main are treated like prepared relea
 Tag names must be valid Git refs. A package can set `tag-prefix` in `.sweet.yml`
 to override the literal text before its version.
 
-The planner invokes `sweet git tag --base <before-sha> --head <after-sha> --dry-run --json`.
-The tag job creates missing annotated tags from that plan, then pushes only its refs with
-`git push --atomic`. Matching existing tags are retained, including lightweight
+The tag job invokes `sweet git tag --base <before-sha> --head <after-sha> --json`,
+so Sweet validates the range and creates missing annotated tags. The job pushes
+one tag at a time: GitHub does not create push events when more than three tags
+are pushed together. Matching existing tags are retained, including lightweight
 tags. A tag targeting another commit or a version reused within the range stops
-the operation. Tags are never moved or overwritten. If a remote rejects any tag,
-none of that push's refs are updated. Rerunning the original CI run safely retries
+the operation. Tags are never moved or overwritten. If a remote rejects a tag,
+earlier pushes remain. Rerunning the original CI run safely retries
 the original range after a failure; later pushes do not automatically backfill it.
 
-The job uses `GITHUB_TOKEN` with `contents: write`. Tags pushed by this token do not
-start other push-triggered workflows. CI therefore calls publishing
-explicitly for each CLI tag in its plan. See [CLI publishing](publishing.md) and
+The job requires a personal or GitHub App token with Contents write access,
+passed as `release-token`. This repository uses `RELEASE_PR_TOKEN`.
+Tags pushed with `GITHUB_TOKEN` do not start other push-triggered workflows.
+See [CLI publishing](publishing.md) and
 [GitHub's workflow trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
 The local tests use temporary repositories and a bare remote to verify annotated
-tags, reruns, conflicts, atomic rejection, and recovery without contacting GitHub.
+tags, reruns, conflicts, push rejection, and recovery without contacting GitHub.

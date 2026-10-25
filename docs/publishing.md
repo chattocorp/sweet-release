@@ -1,36 +1,25 @@
 # CLI publishing
 
-After checks pass, CI calls the shared `.github/workflows/release.yml` with
-`github-release: true`. The GitHub workflow owns tags, release notes, drafts,
-asset uploads, and publication. The Sweet CLI only supplies package metadata,
-changelogs, and local Git tags; it does not call GitHub.
+The shared workflows create release PRs and push version tags. Publication is
+the caller's responsibility. This repository's `.github/workflows/release-cli.yml`
+runs on `sweet@*` tag pushes and publishes only the CLI.
 
-Our caller enables GoReleaser for `apps/sweet` and selects
-`apps/sweet/go.mod` for Go setup. Other packages publish notes only.
+The release workflow checks out the tag and uses `apps/sweet/go.mod` for Go setup.
 GoReleaser builds archives in snapshot mode with `RELEASE_VERSION` supplied
 by the workflow, which also supports prefixed release tags. Its release settings
-do not publish anything. The caller's verification command checks the Linux
-binary version and SHA-256 checksums before the shared uploader runs.
+do not publish anything. The workflow checks the Linux binary version and
+SHA-256 checksums before publication.
 
-The shared workflow checks out each exact release commit, verifies the remote
-tag, and prepares a draft from its package name and versioned changelog.
-The internal build action installs GoReleaser through its official action and
-checks the recorded version, commit, and archive hashes. It returns a JSON list
-of Archive and Checksum paths selected from `dist/artifacts.json`, plus custom
-assets. The GitHub uploader only receives that list of files and rechecks the
-remote tag and draft state. Publication runs only after every preceding step succeeds.
+Sweet extracts the release notes from the versioned changelog. The workflow
+passes the notes, archives, and checksums to `gh release create --verify-tag`.
+With assets, this command creates a draft, uploads the files, and then publishes.
 
-Jobs for the same tag are serialized. A build/upload failure leaves the draft
-unpublished. Rerun the original CI run to preserve its commit range: retries reuse
-matching tags, refresh drafts, and replace partial uploads. Published releases
-skip all builds and mutations. API errors fail the job. A moved or deleted tag
-stops release mutations. There is no arbitrary historical-tag publishing workflow.
+Jobs for the same tag are serialized. A build failure stops publication; an
+upload failure leaves an unpublished draft. Rerun the failed tag workflow to
+retry. It rebuilds the assets, skips publication for an already published release,
+and recreates a leftover draft before uploading again. The tag is kept.
 
-Our caller sets `github-latest` to false. After all release jobs succeed, a
-serialized repository-specific promotion job selects the highest published stable
-CLI version across current and historical prefixes. It excludes drafts,
-prereleases, and non-CLI packages, so retrying an older release cannot replace
-a newer Latest release. Rerunning CI also retries failed promotion.
+GitHub selects Latest automatically. There is no separate promotion job.
 
 ## Local validation
 

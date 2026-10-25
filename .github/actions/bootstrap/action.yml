@@ -2,8 +2,8 @@ name: Bootstrap Sweet workflows
 description: Internal helper that locates scripts and installs Sweet for reusable workflows.
 inputs:
   sweet-version:
-    description: Release tag, latest, or source for development of Sweet itself.
-    default: sweet@0.3.0
+    description: Release tag, latest, or source to build the CLI from this action revision.
+    default: source
   install:
     description: Set to false when only helper scripts are needed.
     default: 'true'
