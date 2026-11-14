@@ -12,7 +12,27 @@ sweet status --json
 
 Status shows all packages from any directory in the repository. The highest
 required bump among a package's pending notes determines its next version.
-Invalid manifests or notes appear in the problems list.
+Invalid manifests or notes appear in the problems list. These reported problems
+do not change the exit status: `status` remains informational, including with
+`--json`. Its JSON `problems` entries retain their `path` and `message` fields.
+Command failures, such as invalid repository configuration or tag collisions,
+can still return a non-zero exit status.
+
+## Validate before merging
+
+```sh
+sweet doctor
+```
+
+Doctor checks all packages, tag ownership, and pending release notes using the
+repository's change-type policy. It reports file paths for invalid notes,
+including parse errors and unknown types. It also prepares releases in memory
+to check configured version files and changelog files, without writing changes.
+It exits 2 on problems and 0 when validation passes. Later write failures or
+changes to the checkout can still cause `sweet bump` to fail.
+
+Use doctor as the PR CI gate. See the reusable
+[Doctor workflow](../github-actions/#doctor) for a single-job integration.
 
 ## Choose packages
 

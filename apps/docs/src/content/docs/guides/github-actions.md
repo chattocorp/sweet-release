@@ -1,12 +1,13 @@
 ---
 title: GitHub Actions
-description: Shared workflows for release PRs and version tags.
+description: Shared workflows for PR validation, release PRs, and version tags.
 ---
 
-Sweet provides two reusable workflows, both run on pushes to `main`:
+Sweet provides three reusable workflows:
 
 | Workflow | Responsibility |
 | --- | --- |
+| `doctor.yml` | Validate pending releases in pull requests. |
 | `bump.yml` | Create and update release PRs from pending change notes. |
 | `tag.yml` | Tag package versions committed by merged release PRs. |
 
@@ -16,13 +17,42 @@ upload, or deploy each package however it needs.
 ## Version the integration
 
 The examples use `@main`. To pin, use a published immutable `workflows-vX.Y.Z`
-tag or a full commit SHA, and use the same revision for both workflows. By
+tag or a full commit SHA, and use the same revision for all workflows. By
 default the workflows build the Sweet CLI from that same revision
 (`sweet-version: source`), so the workflows and CLI always match. Set a CLI
 release tag or `latest` to install a prebuilt binary instead.
 
 Internal action references use GitHub's `$/` syntax and require runner 2.336.0
 or newer. The shared workflows use GitHub-hosted Ubuntu runners.
+
+## Doctor
+
+Add this job to your PR CI, or create `.github/workflows/doctor.yml`:
+
+```yaml
+name: Validate releases
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  doctor:
+    uses: chattocorp/sweet-release/.github/workflows/doctor.yml@main
+```
+
+Pin `@main` to the same workflow tag or full commit SHA as `bump.yml` and
+`tag.yml`, using a revision that includes `doctor.yml`. The default
+`sweet-version: source` builds the CLI from that revision. Older binaries,
+including Sweet 0.2.0, do not validate pending notes with `doctor`.
+
+The workflow checks the PR merge checkout with `sweet doctor`. It needs no
+release token and does not change files. Make this job a required status check
+to block merges with invalid releases. If your CI already installs Sweet, add
+a step with `run: sweet doctor` instead.
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `sweet-version` | `source` | CLI to use: `source`, a release tag, or `latest`. |
 
 ## Bump
 
