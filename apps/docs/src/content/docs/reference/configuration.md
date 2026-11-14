@@ -94,10 +94,10 @@ Existing tags are never renamed or removed; changing the prefix can create a new
 tag for an already released version when you run `sweet git tag`.
 
 Each package must have a unique tag prefix, even if its current version differs
-from other packages. Run `sweet doctor` to report configuration problems and
-duplicate prefixes as warnings. Other repository commands fail on duplicate
+from other packages. Run `sweet doctor` to fail on configuration problems and
+duplicate prefixes. Other repository commands fail on duplicate
 prefixes before making changes. Set a unique `tag-prefix` in each conflicting
-package's `.sweet.yml` to resolve the warning.
+package's `.sweet.yml` to resolve the problem.
 
 ## Version files
 

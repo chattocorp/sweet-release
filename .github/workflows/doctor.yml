@@ -1,0 +1,26 @@
+name: Doctor
+
+on:
+  workflow_call:
+    inputs:
+      sweet-version:
+        description: Sweet release tag, latest, or source to build the CLI from this workflow revision.
+        type: string
+        default: source
+
+permissions:
+  contents: read
+
+jobs:
+  doctor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: $/.github/actions/bootstrap
+        with:
+          sweet-version: ${{ inputs.sweet-version }}
+      - name: Validate pending releases
+        run: sweet doctor

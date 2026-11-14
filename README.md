@@ -10,10 +10,17 @@ sweet init repo
 sweet init package
 sweet change
 sweet status
+sweet doctor
 sweet bump .
 ```
 
 Review and commit the changes, then tag and publish through your release process.
+
+`sweet status` shows pending releases; `sweet doctor` validates notes, package
+configuration, and release preparation without changing files, and exits non-zero
+on problems. Run it in PR CI to catch invalid releases before merge. Use the
+[reusable Doctor workflow](apps/docs/src/content/docs/guides/github-actions.md#doctor)
+with the same revision pin as the Bump and Tag workflows.
 
 ## A monorepo Sweet Release story
 

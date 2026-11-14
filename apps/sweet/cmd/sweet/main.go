@@ -56,22 +56,16 @@ func newRootCommand() *cobra.Command {
 	cmd.AddCommand(newGitCommand())
 	cmd.AddCommand(newChangeCommand())
 	cmd.AddCommand(&cobra.Command{
-		Use: "doctor", Short: "Check package configuration and release tag ownership", Args: cobra.NoArgs,
+		Use: "doctor", Short: "Validate packages, pending release notes, and release preparation", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, err := core.RepositoryRoot()
 			if err != nil {
 				return err
 			}
-			problems, err := core.DiagnosePackages(root)
-			if err != nil {
+			if err := core.CheckRelease(root); err != nil {
 				return err
 			}
-			for _, problem := range problems {
-				cmd.Printf("Warning: %s\n", problem)
-			}
-			if len(problems) == 0 {
-				cmd.Println("No package problems found.")
-			}
+			cmd.Println("No release problems found.")
 			return nil
 		},
 	})
