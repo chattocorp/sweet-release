@@ -14,10 +14,8 @@ use `github.com/chattocorp/sweet-release/apps/sweet/core`. The root `go.work`
 contains this module. The root is not a release package.
 
 The unified package starts from CLI version 0.1.0 and retains the CLI changelog.
-The retired core changelog in `apps/sweet/core/CHANGELOG.md` is historical only.
-New tags use `apps/sweet/v<version>`, which also versions the nested Go module.
-Existing `pkg/sweet/v`, `pkg/cli/v`, and `pkg/core/v` tags retain their original
-source layouts. Moving a manifest above `0.0.0` to a new directory makes it
+New tags use `sweet@<version>`. Older `apps/sweet/v`, `pkg/sweet/v`, `pkg/cli/v`,
+and `pkg/core/v` tags retain their original source layouts. Moving a manifest above `0.0.0` to a new directory makes it
 eligible for a tag at that path, even if its version is unchanged.
 
 With the Go version from `mise.toml` installed, run these commands at the root:
@@ -34,11 +32,12 @@ The equivalent Mise tasks are `mise run sweet -- status`, `mise run check`, and
 Run all Go checks from the repository root.
 
 GitHub Actions runs CI on pushes to `main` and pull requests. Other branch pushes
-do not trigger CI, so each pull request update runs the checks once. It checks Go formatting,
-runs all tests with race detection, runs `go vet`, and builds the CLI
-on Linux. You can also start the CI workflow manually from the Actions tab.
-To run the additional checks locally, use `gofmt -l apps/sweet` (no output means
-formatting is correct) and `go test -race ./apps/sweet/...`.
+do not trigger CI, so each pull request update runs the checks once. You can also
+start the CI workflow manually from the Actions tab.
+
+`.github/scripts/check-go.sh` checks Go formatting, runs all tests with race
+detection, and runs `go vet`. CI, release PRs, and release builds all run it;
+`mise run check` runs it locally.
 
 ## Release PR authentication
 

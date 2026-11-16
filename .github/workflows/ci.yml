@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/bootstrap
         with:
-          sweet-version: apps/sweet/v0.2.0
+          sweet-version: sweet@0.3.0
       - shell: bash
         run: sweet --version
 
@@ -42,17 +42,8 @@ jobs:
         with:
           go-version-file: apps/sweet/go.mod
           cache-dependency-path: apps/sweet/go.sum
-      - name: Check formatting
-        run: |
-          unformatted=$(gofmt -l apps/sweet)
-          if [ -n "$unformatted" ]; then
-            printf 'Run gofmt on these files:\n%s\n' "$unformatted"
-            exit 1
-          fi
-      - name: Test with race detection
-        run: go test -race ./apps/sweet/...
-      - name: Run static checks
-        run: go vet ./apps/sweet/...
+      - name: Check formatting, test with race detection, and vet
+        run: bash .github/scripts/check-go.sh
       - name: Test workflow scripts
         run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
       - name: Build CLI

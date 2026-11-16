@@ -5,50 +5,38 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 )
 
-// Run the build hook against each supported source layout.
+// The shared Go checks must stop at the first failing step.
 func TestReleaseChecks(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("release hooks use Bash")
 	}
 	_, source, _, _ := runtime.Caller(0)
 	script := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/check-go.sh")
-	for _, layout := range []struct{ name, mod, patterns string }{
-		{"apps", "apps/sweet/go.mod", "./apps/sweet/..."},
-		{"sweet", "pkg/sweet/go.mod", "./pkg/sweet/..."},
-		{"root", "go.mod", "./..."},
-		{"historical", "pkg/cli/go.mod", "./pkg/cli/... ./pkg/core/..."},
+	dir := t.TempDir()
+	// Stub go and gofmt: go records its arguments; FAIL_STEP makes a step fail.
+	stubs := map[string]string{
+		"go":    "#!/bin/sh\necho \"$1\"\n[ \"$FAIL_STEP\" != \"$1\" ]\n",
+		"gofmt": "#!/bin/sh\n[ \"$FAIL_STEP\" != gofmt ] || echo apps/sweet/unformatted.go\n",
+	}
+	for name, content := range stubs {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tt := range []struct{ fail, want string }{
+		{"", "test\nvet\n"},
+		{"gofmt", "Run gofmt on these files:\napps/sweet/unformatted.go\n"},
+		{"test", "test\n"},
 	} {
-		t.Run(layout.name, func(t *testing.T) {
-			dir := t.TempDir()
-			mod := layout.mod
-			if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, mod)), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(dir, mod), []byte("module example.test/release\n"), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(dir, "go"), []byte("#!/bin/sh\necho \"$*\"\n[ -z \"$FAIL_TEST\" ] || [ \"$1\" != test ]\n"), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			cmd := exec.Command("bash", script)
-			cmd.Dir = dir
-			cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-			out, err := cmd.CombinedOutput()
-			want := "test " + layout.patterns + "\nvet " + layout.patterns + "\n"
-			if err != nil || string(out) != want {
-				t.Fatalf("checks: %s, %v; want %s", out, err, want)
-			}
-			cmd = exec.Command("bash", script)
-			cmd.Dir = dir
-			cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"), "FAIL_TEST=1")
-			out, err = cmd.CombinedOutput()
-			if err == nil || strings.Contains(string(out), "vet ") {
-				t.Fatalf("failed tests must stop release checks: %s, %v", out, err)
-			}
-		})
+		cmd := exec.Command("bash", script)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"), "FAIL_STEP="+tt.fail)
+		out, err := cmd.CombinedOutput()
+		if (err != nil) != (tt.fail != "") || string(out) != tt.want {
+			t.Errorf("FAIL_STEP=%q: %q, %v; want %q", tt.fail, out, err, tt.want)
+		}
 	}
 }

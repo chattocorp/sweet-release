@@ -44,7 +44,52 @@ func prepareReleases(root string, paths []string) (*releasePreparation, error) {
 	if err != nil {
 		return nil, err
 	}
-	types := config.ChangeTypes
+	selected, err := selectReleases(statuses, paths)
+	if err != nil {
+		return nil, err
+	}
+	plan := &releasePreparation{}
+	var edits []releaseEdit
+	versionFiles := map[string]*versionFilePlan{}
+	repository := sourceRepository(root, config)
+	for _, status := range selected {
+		if status.NextVersion == status.Version {
+			continue
+		}
+		if err := planVersionFiles(root, status, versionFiles); err != nil {
+			return nil, err
+		}
+		manifest, err := manifestEdit(filepath.Join(root, status.Path, ".sweet.yml"), status.NextVersion)
+		if err != nil {
+			return nil, err
+		}
+		changelog, err := changelogEdit(root, repository, status, config.ChangeTypes)
+		if err != nil {
+			return nil, err
+		}
+		edits = append(edits, manifest, changelog)
+		for _, change := range status.Changes {
+			edit, err := readReleaseEdit(filepath.Join(root, change.Path), false)
+			if err != nil {
+				return nil, err
+			}
+			edit.remove = true
+			edits = append(edits, edit)
+		}
+		plan.statuses = append(plan.statuses, status)
+	}
+	fileEdits, err := versionFileEdits(versionFiles)
+	if err != nil {
+		return nil, err
+	}
+	plan.edits = append(fileEdits, edits...)
+	return plan, nil
+}
+
+// selectReleases picks the statuses for the given package paths, or all of them
+// without paths. It fails on problems in selected packages, on ambiguous tag
+// prefixes anywhere, and on paths that are not packages.
+func selectReleases(statuses []PackageStatus, paths []string) ([]PackageStatus, error) {
 	wanted := map[string]bool{}
 	for _, path := range paths {
 		wanted[filepath.ToSlash(filepath.Clean(path))] = false
@@ -74,99 +119,63 @@ func prepareReleases(root string, paths []string) (*releasePreparation, error) {
 	for _, path := range missing {
 		errs = append(errs, fmt.Errorf("%s is not a Sweet package", path))
 	}
-	if err := errors.Join(errs...); err != nil {
-		return nil, err
-	}
-	var edits []releaseEdit
-	versionFiles := map[string]*versionFilePlan{}
-	var releases []PackageStatus
-	plan := &releasePreparation{}
-	repository := sourceRepository(root, config)
-	for _, status := range selected {
-		if status.NextVersion == status.Version {
-			continue
-		}
-		manifest, err := readReleaseEdit(filepath.Join(root, status.Path, ".sweet.yml"), false)
-		if err != nil {
-			return nil, err
-		}
-		files := map[string]*versionFilePlan{}
-		if err := planVersionFiles(root, status, files); err != nil {
-			return nil, err
-		}
-		filePaths := make([]string, 0, len(files))
-		for path := range files {
-			filePaths = append(filePaths, path)
-		}
-		sort.Strings(filePaths)
-		for _, path := range filePaths {
-			file := files[path]
-			if existing := versionFiles[path]; existing != nil {
-				existing.replacements = append(existing.replacements, file.replacements...)
-			} else {
-				versionFiles[path] = file
-			}
-		}
-		var doc yaml.Node
-		if err := yaml.Unmarshal(manifest.before, &doc); err != nil {
-			return nil, err
-		}
-		mapping := doc.Content[0]
-		foundVersion := false
-		for i := 0; i < len(mapping.Content); i += 2 {
-			if mapping.Content[i].Value == "version" {
-				mapping.Content[i+1].Value = status.NextVersion
-				foundVersion = true
-			}
-		}
-		// A YAML merge can supply the old version. Override it explicitly.
-		if !foundVersion {
-			mapping.Content = append(mapping.Content,
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "version"},
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: status.NextVersion})
-		}
-		var buf bytes.Buffer
-		encoder := yaml.NewEncoder(&buf)
-		encoder.SetIndent(2)
-		if err := encoder.Encode(&doc); err != nil {
-			return nil, err
-		}
-		if err := encoder.Close(); err != nil {
-			return nil, err
-		}
-		manifest.after = buf.Bytes()
-		changelog, err := readReleaseEdit(filepath.Join(root, status.Path, "CHANGELOG.md"), true)
-		if err != nil {
-			return nil, err
-		}
-		introduction := string(changelog.before)
-		if strings.TrimSpace(introduction) == "" {
-			introduction = "# " + status.DisplayName() + " Changelog\n"
-		}
-		links := make(map[string]string)
-		for _, change := range status.Changes {
-			links[change.Path] = sourceLink(root, repository, change.Path)
-		}
-		entry := releaseEntryWithLinks(status, types, links, prereleaseHistory(status, string(changelog.before))...)
-		changelog.after = []byte(insertRelease(introduction, entry))
-		edits = append(edits, manifest, changelog)
-		for _, change := range status.Changes {
-			edit, err := readReleaseEdit(filepath.Join(root, change.Path), false)
-			if err != nil {
-				return nil, err
-			}
-			edit.remove = true
-			edits = append(edits, edit)
-		}
-		releases = append(releases, status)
-	}
-	fileEdits, err := versionFileEdits(versionFiles)
+	return selected, errors.Join(errs...)
+}
+
+// manifestEdit sets the manifest's version, keeping its other settings.
+func manifestEdit(path, version string) (releaseEdit, error) {
+	edit, err := readReleaseEdit(path, false)
 	if err != nil {
-		return nil, err
+		return edit, err
 	}
-	edits = append(fileEdits, edits...)
-	plan.edits, plan.statuses = edits, releases
-	return plan, nil
+	var doc yaml.Node
+	if err := yaml.Unmarshal(edit.before, &doc); err != nil {
+		return edit, err
+	}
+	mapping := doc.Content[0]
+	foundVersion := false
+	for i := 0; i < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == "version" {
+			mapping.Content[i+1].Value = version
+			foundVersion = true
+		}
+	}
+	// A YAML merge can supply the old version. Override it explicitly.
+	if !foundVersion {
+		mapping.Content = append(mapping.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "version"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: version})
+	}
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(&doc); err != nil {
+		return edit, err
+	}
+	if err := encoder.Close(); err != nil {
+		return edit, err
+	}
+	edit.after = buf.Bytes()
+	return edit, nil
+}
+
+// changelogEdit inserts the release entry into the package's changelog.
+func changelogEdit(root, repository string, status PackageStatus, types []ChangeType) (releaseEdit, error) {
+	edit, err := readReleaseEdit(filepath.Join(root, status.Path, "CHANGELOG.md"), true)
+	if err != nil {
+		return edit, err
+	}
+	introduction := string(edit.before)
+	if strings.TrimSpace(introduction) == "" {
+		introduction = "# " + status.DisplayName() + " Changelog\n"
+	}
+	links := make(map[string]string)
+	for _, change := range status.Changes {
+		links[change.Path] = sourceLink(root, repository, change.Path)
+	}
+	entry := releaseEntryWithLinks(status, types, links, prereleaseHistory(status, string(edit.before))...)
+	edit.after = []byte(insertRelease(introduction, entry))
+	return edit, nil
 }
 
 func applyReleaseEdits(edits []releaseEdit) error {
