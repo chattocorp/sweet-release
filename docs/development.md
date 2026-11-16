@@ -84,12 +84,11 @@ Static output goes to `apps/docs/dist/`. Hosting is not configured yet. Set Astr
 `site` (and `base` for subpath hosting) when choosing a deployment target, and
 check navigation, the favicon, and search under that URL.
 
-The site's `.sweet.yml` controls its independent version and updates
-`package.json`. After `sweet bump apps/docs`, run
-`pnpm --dir apps/docs install --lockfile-only --no-frozen-lockfile --ignore-scripts` and commit
-the lockfile with the release. The Release PR workflow does this and verifies
-the site automatically for docs releases. Docs tags use `apps/docs/v<version>`
-and do not publish CLI binaries.
+The site has no release package of its own. It shares the Sweet Release version:
+`apps/sweet/.sweet.yml` lists `apps/docs/package.json` as a version file, and the
+Release PR workflow checks and builds the site with every release. Docs ship with
+the features they describe, so docs-only changes need no release note (use
+`chore` if one is required).
 
 ## Issues
 
