@@ -1,5 +1,11 @@
 # Sweet Release Docs Changelog
 
+## 0.3.0
+
+### Features
+
+- Add a coding agent guide and mise install instructions. ([#52](https://github.com/chattocorp/sweet-release/pull/52))
+
 ## 0.2.0
 
 ### Features
