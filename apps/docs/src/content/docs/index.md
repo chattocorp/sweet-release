@@ -31,6 +31,7 @@ You review and commit the result. Tagging and publishing are separate steps.
 - [Write release notes](./guides/release-notes/) interactively or from scripts.
 - [Prepare a release](./guides/prepare-a-release/) for one or more packages.
 - [Configure Sweet](./reference/configuration/) for your version and changelog policies.
+- [Hand releases to a coding agent](./guides/agents/) with a single prompt.
 
 Sweet works across languages. Configure version targets in JSON, YAML, TOML, or
 plaintext files without changing how your project builds or publishes.

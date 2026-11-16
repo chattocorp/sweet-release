@@ -5,9 +5,18 @@ description: Install Sweet Release and prepare your first package release.
 
 ## Install Sweet
 
-Download the archive for your operating system and architecture from
+With [mise](https://mise.jdx.dev):
+
+```sh
+mise use github:chattocorp/sweet-release
+```
+
+Or download the archive for your operating system and architecture from
 [GitHub Releases](https://github.com/chattocorp/sweet-release/releases).
 Extract it and put the `sweet` executable in a directory on your `PATH`.
+
+Using a coding agent? Ask it to "manage my releases using
+chattocorp/sweet-release" and see [Coding agents](../guides/agents/).
 
 ```sh
 sweet --version

@@ -3,7 +3,22 @@
 Release independently versioned packages with Markdown change files.
 Sweet calculates version bumps, updates version files, and generates changelogs.
 
-Download the CLI from [GitHub Releases](https://github.com/chattocorp/sweet-release/releases).
+## Install
+
+Tell your coding agent:
+
+> Please manage my releases using chattocorp/sweet-release.
+
+Agents: follow the [coding agent guide](apps/docs/src/content/docs/guides/agents.md).
+
+To install the CLI yourself, use [mise](https://mise.jdx.dev) or download it from
+[GitHub Releases](https://github.com/chattocorp/sweet-release/releases):
+
+```sh
+mise use github:chattocorp/sweet-release
+```
+
+## Usage
 
 ```sh
 sweet init repo
@@ -83,7 +98,7 @@ sweet git tag
 ```
 
 Sweet creates annotated local tags for current committed package versions, such as
-`apps/api/v1.2.0` (or `v1.2.0` for a root package). Each tag points to the commit
+`api@1.2.0` (or `v1.2.0` for a root package). Each tag points to the commit
 that introduced that version, even if more commits followed it. Matching tags are
 kept; conflicting tags cause an error.
 
