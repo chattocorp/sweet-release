@@ -51,6 +51,14 @@ versions with `sweet status --json` and extracts their sections with
 `sweet changelog`. Descriptions and cleanup results stay outside the checkout
 so they cannot turn a no-op bump into a PR.
 
+Prerelease labels need no workflow support: the PR follows whatever `sweet bump`
+computes from `main`. With `prerelease: beta`, notes merged before the release PR
+update the same `x.y.z-beta.N`; `N` advances only after the merge. Changing the
+label or removing it (finalizing) creates a PR even without notes. A finalize PR
+description comes from the merged changelog entry, covering all prereleases since
+the last stable release. A manifest with a prerelease version but no label is
+finalized on the next run.
+
 Each run regenerates changes from `main`; it does not bump previous release
 branches again. Make corrections through `main`, since edits to generated branches
 can be overwritten. Each successful job uploads its actual desired branch (or an

@@ -54,6 +54,18 @@ Review and commit each release, then tag and publish through your release proces
 Dependency updates between packages remain part of that process; Sweet does not
 propagate releases to dependent packages.
 
+## Prereleases
+
+To ship prereleases, add a label to the package's `.sweet.yml`:
+
+```yaml
+version: 1.2.3
+prerelease: beta
+```
+
+`sweet bump` then releases `1.3.0-beta.0`, `1.3.0-beta.1`, and so on. Remove the
+label to release `1.3.0`; its changelog entry combines all changes since `1.2.3`.
+
 ## Tag releases
 
 After you commit a release, preview and create its Git tags:

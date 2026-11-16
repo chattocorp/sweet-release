@@ -6,7 +6,7 @@
 - [Write release notes](../apps/docs/src/content/docs/guides/release-notes.md)
 - [Prepare a release](../apps/docs/src/content/docs/guides/prepare-a-release.md)
 - [Configuration](../apps/docs/src/content/docs/reference/configuration.md)
-- [Detailed CLI behavior](cli-reference.md): inventory, validation, changelogs, and version files.
+- [Detailed CLI behavior](cli-reference.md): inventory, validation, prereleases, changelogs, and version files.
 
 ## Work on this repository
 

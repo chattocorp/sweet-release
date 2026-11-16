@@ -43,6 +43,13 @@ unrelated invalid package does not block an explicit selection. If a file
 operation fails, Sweet attempts to restore affected files. Review the Git diff
 before committing.
 
+## Release prereleases
+
+Add `prerelease: beta` (or another label) to a package's `.sweet.yml` to release
+`1.3.0-beta.0`, `1.3.0-beta.1`, and so on from pending notes. Remove it to release
+the final `1.3.0`; that changelog entry lists every change since the last stable
+release. See [prereleases](/reference/configuration/#prereleases).
+
 ## Update lockfiles and publish
 
 After a bump, run any package-specific commands needed to update lockfiles.

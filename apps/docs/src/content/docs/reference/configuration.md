@@ -76,6 +76,26 @@ non-empty single-line string without surrounding whitespace. It supplies a
 display name for changelogs and releases. Paths still identify packages.
 Without a name, the repository-relative path is used for display.
 
+### Prereleases
+
+Set `prerelease` to a label such as `alpha`, `beta`, or `rc` to release
+prereleases of the next version:
+
+```yaml
+version: 1.2.3
+prerelease: beta
+```
+
+With a pending minor change, the next release is `1.3.0-beta.0`, then
+`1.3.0-beta.1`, and so on. A larger change moves the base version, for example to
+`2.0.0-beta.0`. Changing the label, for example to `rc`, releases `1.3.0-rc.0`
+even without new notes; labels must sort after the current one.
+
+Remove `prerelease` to finalize: the next `sweet bump` releases `1.3.0`, even
+without new notes. Its changelog entry combines the changes of all prereleases
+since the last stable release. The label must be letters, digits, and hyphens,
+and not only digits.
+
 ### Release tags
 
 Tags default to `<directory-name>@<version>`: `apps/api` at version `1.2.3`

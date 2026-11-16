@@ -73,6 +73,16 @@ It receives `RELEASE_JOB` JSON with `branch`, `title`, and `packages`, and owns
 any extra tool setup. Its changes join the release PR. Use `strategy: combined`
 when packages share lockfiles or other generated files.
 
+### Prereleases
+
+With [`prerelease`](/reference/configuration/#prereleases) set in a package
+manifest, its release PR prepares the next prerelease, such as
+`chore: release api 1.3.0-beta.0`. Notes merged before the PR keep updating that
+same version; the counter advances only after the PR is merged. Changing the label
+on the base branch, for example to `rc`, produces a PR without new notes. Removing
+it produces the final `1.3.0` PR, whose description lists all changes since the
+last stable release.
+
 ## Tag
 
 Call `tag.yml` from your main CI after your checks pass:
@@ -142,8 +152,12 @@ jobs:
           version=${TAG#cli@}
           # Build your assets into dist/ here.
           sweet changelog --version "$version" -- apps/cli > notes.md
-          gh release create "$TAG" dist/* --verify-tag --notes-file notes.md
+          flags=(); [[ "${version%%+*}" == *-* ]] && flags+=(--prerelease)
+          gh release create "$TAG" dist/* --verify-tag --notes-file notes.md "${flags[@]}"
 ```
+
+The `--prerelease` flag marks versions such as `1.3.0-beta.0` as GitHub
+prereleases, so they never become the Latest release.
 
 Release workflows should be safe to rerun; for example, skip publication when
 `gh release view "$TAG"` shows a published release.

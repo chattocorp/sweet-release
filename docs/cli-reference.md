@@ -46,8 +46,25 @@ pkg/core  0.2.0
 `BUMP` and `NEXT` cells.
 `NEXT` applies that bump once to the manifest version. With no bump, the version
 stays unchanged. A bump increments the selected version component, resets lower
-components to zero, and removes prerelease and build suffixes. Manifest versions
-must be complete semantic versions such as `1.2.3` or `2.0.0-beta.1`.
+components to zero, and removes build metadata. Manifest versions must be complete
+semantic versions such as `1.2.3` or `2.0.0-beta.1`.
+
+A prerelease version already covers bumps up to its own level: `1.3.0-beta.1`
+covers minor and patch changes, `2.0.0-beta.1` covers all of them. Without a
+manifest `prerelease` label, a prerelease version is finalized (`1.3.0-beta.1` →
+`1.3.0`), even without pending notes; a larger bump moves the base instead.
+With `prerelease: <label>`, Sweet produces prereleases:
+
+| Current | Bump | Label | Next |
+|---|---|---|---|
+| `1.2.3` | minor | `beta` | `1.3.0-beta.0` |
+| `1.3.0-beta.0` | patch or minor | `beta` | `1.3.0-beta.1` |
+| `1.3.0-beta.1` | major | `beta` | `2.0.0-beta.0` |
+| `1.3.0-beta.1` | any or none | `rc` | `1.3.0-rc.0` |
+| `1.3.0-rc.0` | patch or minor | `beta` | problem: would not advance |
+
+A stable version or current-channel prerelease without bump-relevant notes stays
+unchanged. Switching to a label with lower precedence reports a manifest problem.
 
 Notes with `breaking: true` require at least a minor bump for `0.x` versions and
 a major bump for other versions. An explicit major type policy still takes
@@ -134,6 +151,11 @@ Markdown formatting and surrounding whitespace removed; breaking
 notes receive a bold label. Types without a section are omitted from the
 changelog but are still consumed. Existing introductions and release history
 are retained, with the new release inserted before the first level-two heading.
+
+When a release finalizes a prerelease, its changelog entry also merges the items
+of all prerelease entries since the last stable version, newest first and breaking
+changes first within each section. The prerelease entries remain in the history.
+Entries are merged by their `###` section headings and top-level `- ` items.
 
 Notes with `bump: none` remain pending until the package needs a release. That
 release consumes all its pending notes, including those with no version effect.
