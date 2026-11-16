@@ -50,17 +50,19 @@ func prepareReleases(root string, paths []string) (*releasePreparation, error) {
 		wanted[filepath.ToSlash(filepath.Clean(path))] = false
 	}
 	var selected []PackageStatus
-	var problems []error
-	for _, status := range statuses {
+	var problems []Problem
+	packages := make([]Package, len(statuses))
+	for i, status := range statuses {
+		packages[i] = status.Package
 		if _, ok := wanted[status.Path]; len(paths) > 0 && !ok {
 			continue
 		}
 		wanted[status.Path] = true
-		for _, problem := range status.Problems {
-			problems = append(problems, problem)
-		}
+		problems = append(problems, status.Problems...)
 		selected = append(selected, status)
 	}
+	// Tag ownership is repository-wide, so any ambiguity blocks every release.
+	problems = append(problems, TagPrefixProblems(packages)...)
 	var missing []string
 	for path, found := range wanted {
 		if !found {
@@ -68,10 +70,11 @@ func prepareReleases(root string, paths []string) (*releasePreparation, error) {
 		}
 	}
 	sort.Strings(missing)
+	errs := []error{joinProblems(problems)}
 	for _, path := range missing {
-		problems = append(problems, fmt.Errorf("%s is not a Sweet package", path))
+		errs = append(errs, fmt.Errorf("%s is not a Sweet package", path))
 	}
-	if err := errors.Join(problems...); err != nil {
+	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
 	var edits []releaseEdit
@@ -88,7 +91,7 @@ func prepareReleases(root string, paths []string) (*releasePreparation, error) {
 			return nil, err
 		}
 		files := map[string]*versionFilePlan{}
-		if err := planVersionFiles(root, status, manifest.before, files); err != nil {
+		if err := planVersionFiles(root, status, files); err != nil {
 			return nil, err
 		}
 		filePaths := make([]string, 0, len(files))
@@ -222,10 +225,6 @@ func (e releaseEdit) restore() error {
 		return nil
 	}
 	return err
-}
-
-func releaseEntry(status PackageStatus, types []ChangeType) string {
-	return releaseEntryWithLinks(status, types, nil)
 }
 
 // prereleaseHistory returns the bodies of the prerelease entries at the top of

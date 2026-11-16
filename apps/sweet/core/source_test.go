@@ -110,7 +110,7 @@ func TestSourceHistory(t *testing.T) {
 			// A shallow boundary must not be mistaken for an addition.
 			clone := filepath.Join(t.TempDir(), "clone")
 			sourceTestGit(t, root, "clone", "--depth=1", "file://"+root, clone)
-			if got := sourceLink(clone, repo, path); got != "" {
+			if got := sourceRepository(clone, RepositoryConfig{Repository: repo}); got != "" {
 				t.Fatal(got)
 			}
 			sourceTestGit(t, root, "rm", path)

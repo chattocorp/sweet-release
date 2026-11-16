@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -18,7 +17,7 @@ import (
 const defaultRepositoryConfig = `# Sweet repository configuration
 types:
   fix:
-    bump: minor
+    bump: patch
     section: Fixes
   feature:
     bump: minor
@@ -52,15 +51,23 @@ type repositoryConfigNodes struct {
 
 func decodeRepositoryConfig(data []byte) (repositoryConfigNodes, error) {
 	var nodes repositoryConfigNodes
+	err := decodeYAMLDocument(data, &nodes, false, "repository configuration")
+	return nodes, err
+}
+
+// decodeYAMLDocument decodes exactly one YAML document. Strict decoding rejects
+// unknown fields.
+func decodeYAMLDocument(data []byte, out any, strict bool, what string) error {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(&nodes); err != nil {
-		return nodes, fmt.Errorf("decode repository configuration: %w", err)
+	decoder.KnownFields(strict)
+	if err := decoder.Decode(out); err != nil {
+		return fmt.Errorf("decode %s: %w", what, err)
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return nodes, fmt.Errorf("expected one YAML document")
+		return fmt.Errorf("expected one YAML document")
 	}
-	return nodes, nil
+	return nil
 }
 
 // LoadRepositoryConfig reads and validates the repository's shared settings once.
@@ -92,30 +99,22 @@ func parseRepositoryConfig(data []byte) (RepositoryConfig, error) {
 	return RepositoryConfig{ChangeTypes: types, Repository: repositoryURL(nodes.Repository, false)}, nil
 }
 
-// ChangeTypes loads shared types from the package's Git repository root.
-// Missing configuration or an omitted types field uses the built-in defaults.
-func ChangeTypes(dir string) ([]string, error) {
-	config, err := LoadChangeTypes(dir)
-	if err != nil {
-		return nil, err
-	}
-	names := make([]string, len(config))
-	for i, typ := range config {
+// CheckChangeType reports whether name is one of the configured types.
+func CheckChangeType(types []ChangeType, name string) error {
+	names := make([]string, len(types))
+	for i, typ := range types {
+		if typ.Name == name {
+			return nil
+		}
 		names[i] = typ.Name
 	}
-	return names, nil
-}
-
-// LoadChangeTypes loads release policies in their configured display order.
-func LoadChangeTypes(dir string) ([]ChangeType, error) {
-	config, err := LoadRepositoryConfig(dir)
-	return config.ChangeTypes, err
+	return fmt.Errorf("unknown change type %q; available types: %s", name, strings.Join(names, ", "))
 }
 
 func loadRepositoryConfig(dir string) ([]byte, string, error) {
-	root := dir
-	if output, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output(); err == nil {
-		root = strings.TrimSuffix(string(output), "\n")
+	root, err := gitRoot(dir)
+	if err != nil {
+		root = dir
 	}
 	path := filepath.Join(root, ".sweet.config.yml")
 	data, err := os.ReadFile(path)
@@ -127,10 +126,7 @@ func loadRepositoryConfig(dir string) ([]byte, string, error) {
 	return data, path, nil
 }
 
-func parseChangeTypes(data []byte) ([]ChangeType, error) {
-	config, err := parseRepositoryConfig(data)
-	return config.ChangeTypes, err
-}
+var changeTypeName = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
 var defaultPolicyCache struct {
 	sync.Once
@@ -159,15 +155,14 @@ func changeTypes(typeNode yaml.Node) ([]ChangeType, error) {
 		return defaultChangeTypes()
 	}
 	if typeNode.Kind != yaml.MappingNode || len(typeNode.Content) == 0 {
-		return nil, fmt.Errorf("types must be a non-empty mapping, for example: types: {fix: {bump: minor, section: Fixes}}")
+		return nil, fmt.Errorf("types must be a non-empty mapping, for example: types: {fix: {bump: patch, section: Fixes}}")
 	}
-	valid := regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 	seen := map[string]bool{}
 	types := make([]ChangeType, 0, len(typeNode.Content)/2)
 	for i := 0; i < len(typeNode.Content); i += 2 {
 		node := typeNode.Content[i]
 		name := node.Value
-		if node.Tag != "!!str" || !valid.MatchString(name) {
+		if node.Tag != "!!str" || !changeTypeName.MatchString(name) {
 			return nil, fmt.Errorf("invalid change type %q: use lowercase letters, digits, and hyphens, starting with a letter", name)
 		}
 		if seen[name] {

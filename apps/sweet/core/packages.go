@@ -2,11 +2,8 @@
 package core
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"go.yaml.in/yaml/v3"
-	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -15,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // Package identifies a release package by its repository-relative path.
@@ -24,6 +23,8 @@ type Package struct {
 	Name       string  `json:"name,omitempty"`
 	TagPrefix  *string `json:"tagPrefix,omitempty"`
 	Prerelease string  `json:"prerelease,omitempty"`
+
+	versionFiles []VersionFile
 }
 
 // ReleasePrefix is the literal text before the version in a release tag.
@@ -60,25 +61,20 @@ func TagPrefixProblems(packages []Package) []Problem {
 	return problems
 }
 
-// DiagnosePackages returns manifest and tag-prefix problems without failing on them.
-func DiagnosePackages(root string) ([]Problem, error) {
-	packages, problems, err := discoverPackages(root)
-	return append(problems, TagPrefixProblems(packages)...), err
-}
-
 // CheckTagPrefixes validates tag ownership in working files.
 func CheckTagPrefixes(root string) error {
 	packages, _, err := discoverPackages(root)
 	if err != nil {
 		return err
 	}
-	return tagPrefixError(packages)
+	return joinProblems(TagPrefixProblems(packages))
 }
 
-func tagPrefixError(packages []Package) error {
-	var errs []error
-	for _, problem := range TagPrefixProblems(packages) {
-		errs = append(errs, problem)
+// joinProblems combines problems into one error, or nil without problems.
+func joinProblems(problems []Problem) error {
+	errs := make([]error, len(problems))
+	for i, problem := range problems {
+		errs[i] = problem
 	}
 	return errors.Join(errs...)
 }
@@ -92,8 +88,10 @@ func (p Package) DisplayName() string {
 }
 
 // RepositoryRoot returns the root of the current Git repository.
-func RepositoryRoot() (string, error) {
-	output, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+func RepositoryRoot() (string, error) { return gitRoot(".") }
+
+func gitRoot(dir string) (string, error) {
+	output, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
 	if err != nil {
 		return "", fmt.Errorf("find Git repository root: %w", err)
 	}
@@ -106,13 +104,8 @@ func DiscoverPackages(root string) ([]Package, error) {
 	if err != nil {
 		return nil, err
 	}
-	var errs []error
-	problems = append(problems, TagPrefixProblems(packages)...)
-	for _, problem := range problems {
-		errs = append(errs, problem)
-	}
-	if len(errs) > 0 {
-		return nil, errors.Join(errs...)
+	if err := joinProblems(append(problems, TagPrefixProblems(packages)...)); err != nil {
+		return nil, err
 	}
 	return packages, nil
 }
@@ -156,15 +149,10 @@ func packagesFromFiles(root string, paths []string) ([]Package, []Problem, error
 		if err != nil {
 			problems = append(problems, Problem{Path: path, Message: err.Error()})
 		}
-		packages = append(packages, Package{Path: filepath.ToSlash(filepath.Dir(path)), Version: manifest.Version, Name: manifest.Name, TagPrefix: manifest.TagPrefix, Prerelease: manifest.Prerelease})
+		packages = append(packages, Package{Path: filepath.ToSlash(filepath.Dir(path)), Version: manifest.Version, Name: manifest.Name, TagPrefix: manifest.TagPrefix, Prerelease: manifest.Prerelease, versionFiles: manifest.VersionFiles})
 	}
 	sort.Slice(packages, func(i, j int) bool { return packages[i].Path < packages[j].Path })
 	return packages, problems, nil
-}
-
-func readPackageVersion(content []byte) (string, error) {
-	manifest, err := parsePackageManifest(content)
-	return manifest.Version, err
 }
 
 type packageManifest struct {
@@ -184,13 +172,8 @@ func parsePackageManifest(content []byte) (packageManifest, error) {
 		TagPrefix  yaml.Node `yaml:"tag-prefix"`
 		Prerelease yaml.Node `yaml:"prerelease"`
 	}
-	decoder := yaml.NewDecoder(bytes.NewReader(content))
-	if err := decoder.Decode(&manifest); err != nil {
-		return result, fmt.Errorf("decode package YAML: %w", err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return result, fmt.Errorf("expected one YAML document")
+	if err := decodeYAMLDocument(content, &manifest, false, "package YAML"); err != nil {
+		return result, err
 	}
 	version := manifest.Version
 	if version.Kind != yaml.ScalarNode || version.Tag != "!!str" || strings.TrimSpace(version.Value) == "" || strings.ContainsAny(version.Value, " \t\r\n") {
@@ -228,11 +211,6 @@ func parsePackageManifest(content []byte) (packageManifest, error) {
 }
 
 var prereleasePattern = regexp.MustCompile(`^[0-9A-Za-z-]+$`)
-
-func readPackageName(content []byte) (string, error) {
-	manifest, err := parsePackageManifest(content)
-	return manifest.Name, err
-}
 
 func packageNameFromNode(n yaml.Node) (string, error) {
 	if n.Kind == 0 {

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -22,11 +21,6 @@ type VersionFile struct {
 	Path   string    `yaml:"path"`
 	Format string    `yaml:"format"`
 	Key    yaml.Node `yaml:"key"`
-}
-
-func readVersionFiles(data []byte) ([]VersionFile, error) {
-	manifest, err := parsePackageManifest(data)
-	return manifest.VersionFiles, err
 }
 
 func versionFilesFromNode(node yaml.Node) ([]VersionFile, error) {
@@ -100,12 +94,8 @@ type versionFilePlan struct {
 	replacements []versionReplacement
 }
 
-func planVersionFiles(root string, status PackageStatus, manifest []byte, plans map[string]*versionFilePlan) error {
-	targets, err := readVersionFiles(manifest)
-	if err != nil {
-		return err
-	}
-	for _, target := range targets {
+func planVersionFiles(root string, status PackageStatus, plans map[string]*versionFilePlan) error {
+	for _, target := range status.versionFiles {
 		path := filepath.Join(root, status.Path, target.Path)
 		rel, err := filepath.Rel(root, path)
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -193,13 +183,8 @@ func yamlVersionReplacement(data []byte, keys []string, version string, isJSON b
 		return zero, fmt.Errorf("invalid JSON")
 	}
 	var doc yaml.Node
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(&doc); err != nil {
+	if err := decodeYAMLDocument(data, &doc, false, "YAML"); err != nil {
 		return zero, err
-	}
-	var extra yaml.Node
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return zero, fmt.Errorf("expected one YAML document")
 	}
 	// Decoding validates duplicate mapping keys as well as YAML syntax.
 	var decoded any

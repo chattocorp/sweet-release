@@ -35,7 +35,7 @@ func TestBumpSinglePackage(t *testing.T) {
 				t.Fatalf("code %d, stdout %s, stderr %s", code, &stdout, &stderr)
 			}
 			data, err := os.ReadFile(manifest)
-			if err != nil || !strings.Contains(string(data), "1.3.0") {
+			if err != nil || !strings.Contains(string(data), "1.2.4") {
 				t.Fatalf("manifest = %q, error = %v", data, err)
 			}
 			if _, err := os.Stat(note); !os.IsNotExist(err) {

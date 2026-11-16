@@ -97,14 +97,15 @@ func TestVersionFileConfiguration(t *testing.T) {
 		"version-files: [{path: file, format: unknown}]",
 		"version-files: [{path: file, format: text, key: version}]",
 	} {
-		if _, err := readPackageVersion([]byte("version: 1.2.3\n" + config)); err == nil {
+		if _, err := parsePackageManifest([]byte("version: 1.2.3\n" + config)); err == nil {
 			t.Errorf("accepted %s", config)
 		}
 	}
-	files, err := readVersionFiles([]byte("version: 1.2.3\nversion-files: [{path: file, format: json, key: [literal.dot, version]}]"))
+	manifest, err := parsePackageManifest([]byte("version: 1.2.3\nversion-files: [{path: file, format: json, key: [literal.dot, version]}]"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	files := manifest.VersionFiles
 	data := []byte(`{"literal.dot": {"version": "1.2.3"}}`)
 	replacements, err := versionReplacements(data, files[0], "2.0.0")
 	if err != nil {
@@ -165,10 +166,10 @@ func TestBumpVersionFiles(t *testing.T) {
 	if err != nil || len(releases) != 2 {
 		t.Fatalf("%v: %v", releases, err)
 	}
-	if got := read("versions.json"); got != "{\"api\": \"1.3.0\", \"other\": \"2.1.0\"}\n" {
+	if got := read("versions.json"); got != "{\"api\": \"1.2.4\", \"other\": \"2.0.1\"}\n" {
 		t.Fatal(got)
 	}
-	if read("api/VERSION") != "1.3.0\n" {
+	if read("api/VERSION") != "1.2.4\n" {
 		t.Fatal("text version not updated")
 	}
 	read("api/CHANGELOG.md")
@@ -201,8 +202,8 @@ func TestVersionFilePathBoundaries(t *testing.T) {
 		{"missing", "no such file or directory"},
 	} {
 		t.Run(tt.path, func(t *testing.T) {
-			manifest := []byte("version: 1.2.3\nversion-files: [{path: " + tt.path + ", format: text}]")
-			err := planVersionFiles(root, PackageStatus{Package: Package{Path: "."}, NextVersion: "2.0.0"}, manifest, map[string]*versionFilePlan{})
+			files := []VersionFile{{Path: tt.path, Format: "text"}}
+			err := planVersionFiles(root, PackageStatus{Package: Package{Path: ".", versionFiles: files}, NextVersion: "2.0.0"}, map[string]*versionFilePlan{})
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("expected %q, got %v", tt.want, err)
 			}
