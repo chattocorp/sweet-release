@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/chattocorp/sweet-release/apps/sweet/core"
@@ -36,19 +35,7 @@ func newBumpCommand() *cobra.Command {
 				}
 			}
 			for _, dir := range args {
-				dir, err = filepath.Abs(dir)
-				if err != nil {
-					return err
-				}
-				dir, err = filepath.EvalSymlinks(dir)
-				if err != nil {
-					return err
-				}
-				root, err = filepath.EvalSymlinks(root)
-				if err != nil {
-					return err
-				}
-				path, err := filepath.Rel(root, dir)
+				path, err := resolvedRel(root, dir)
 				if err != nil {
 					return err
 				}

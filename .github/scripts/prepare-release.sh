@@ -13,7 +13,5 @@ if jq -e '.packages | index("apps/sweet") != null' <<< "$RELEASE_JOB" > /dev/nul
     pnpm --dir apps/docs run build
   '
 fi
-test -z "$(gofmt -l apps/sweet)"
-go test -race ./apps/sweet/...
-go vet ./apps/sweet/...
+bash "$(dirname "$0")/check-go.sh"
 go build -o "$RUNNER_TEMP/sweet-verified" ./apps/sweet/cmd/sweet

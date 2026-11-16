@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/chattocorp/sweet-release/apps/sweet"
 	"github.com/chattocorp/sweet-release/apps/sweet/core"
@@ -70,4 +71,26 @@ func newRootCommand() *cobra.Command {
 		},
 	})
 	return cmd
+}
+
+// resolvedRel returns target relative to base, after resolving symlinks in both.
+// Relative paths are resolved from the working directory.
+func resolvedRel(base, target string) (string, error) {
+	base, err := resolvedAbs(base)
+	if err != nil {
+		return "", err
+	}
+	target, err = resolvedAbs(target)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Rel(base, target)
+}
+
+func resolvedAbs(path string) (string, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(path)
 }

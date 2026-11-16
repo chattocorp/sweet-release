@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -120,21 +121,9 @@ func missingChangePackage(dir string, current, stdin bool) error {
 			return fmt.Errorf("%s\n\nCould not list available packages: %w", message, discoveryErr)
 		}
 		if len(packages) > 0 {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			cwd, err = filepath.EvalSymlinks(cwd)
-			if err != nil {
-				return err
-			}
-			root, err = filepath.EvalSymlinks(root)
-			if err != nil {
-				return err
-			}
 			message += "\n\nChoose a package with one of these commands:\n"
 			for _, pkg := range packages {
-				path, err := filepath.Rel(cwd, filepath.Join(root, pkg.Path))
+				path, err := resolvedRel(".", filepath.Join(root, pkg.Path))
 				if err != nil {
 					return err
 				}
@@ -145,11 +134,11 @@ func missingChangePackage(dir string, current, stdin bool) error {
 				// Quote paths for the shell, including spaces and apostrophes.
 				message += "\n  " + command + " -- '" + strings.ReplaceAll(filepath.ToSlash(path), "'", "'\\''") + "'"
 			}
-			return fmt.Errorf("%s", message)
+			return errors.New(message)
 		}
 	}
 	if current {
-		return fmt.Errorf("%s\n\nTo set up Sweet in a new project:\n\n  sweet init repo       Create shared configuration at the Git repository root.\n  sweet init package    Make the current directory a release package.\n\nThen run 'sweet change' again to write a release note.\nIf repository configuration already exists, skip 'sweet init repo'.\nFor an existing package elsewhere, run 'sweet change <dir>'.", message)
+		return fmt.Errorf("%s\n\nTo set up Sweet in a new project:\n\n  sweet init repo       Create shared configuration at the Git repository root.\n  sweet init package    Make the current directory a release package.\n\nThen run 'sweet change' again to write a release note.\nIf repository configuration already exists, skip 'sweet init repo'.\nFor an existing package elsewhere, run 'sweet change <dir>'", message)
 	}
-	return fmt.Errorf("%s\n\nPass an existing package directory, or initialize this directory with 'sweet init package <dir>'.", message)
+	return fmt.Errorf("%s\n\nPass an existing package directory, or initialize this directory with 'sweet init package <dir>'", message)
 }

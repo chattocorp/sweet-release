@@ -3,10 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/chattocorp/sweet-release/apps/sweet/core"
-	"github.com/spf13/cobra"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/chattocorp/sweet-release/apps/sweet/core"
+	"github.com/spf13/cobra"
 )
 
 func newStatusCommand() *cobra.Command {
