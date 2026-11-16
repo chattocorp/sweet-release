@@ -1,3 +1,4 @@
 - Keep README.md and AGENTS.md lean
 - Put useful agentic documentation into docs/
 - Update apps/docs/ for new and changed features
+- Docs-only changes need no release note; docs share the Sweet Release version

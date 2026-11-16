@@ -5,3 +5,6 @@ prerelease: beta
 version-files:
   - path: version.go
     format: annotated
+  - path: ../docs/package.json
+    format: json
+    key: version

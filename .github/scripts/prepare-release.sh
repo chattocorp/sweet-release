@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # Only this repository needs Node, pnpm, and Go checks after a bump.
-if jq -e '.packages | index("apps/docs") != null' <<< "$RELEASE_JOB" > /dev/null; then
+# The docs site shares the Sweet Release version.
+if jq -e '.packages | index("apps/sweet") != null' <<< "$RELEASE_JOB" > /dev/null; then
   package_manager=$(jq -r .packageManager apps/docs/package.json)
   npx --yes --package=node@24 --package="$package_manager" -c '
     set -e
