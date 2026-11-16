@@ -1,6 +1,7 @@
 # Sweet package configuration
 name: Sweet Release
 version: 0.3.0
+prerelease: beta
 version-files:
   - path: version.go
     format: annotated
