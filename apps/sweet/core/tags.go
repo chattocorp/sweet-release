@@ -90,9 +90,6 @@ func PlanTags(root, base, head string) ([]ReleaseTag, error) {
 				continue
 			}
 			name := versions[pkg].ReleaseTagName()
-			if _, err := tagGit(root, "check-ref-format", "refs/tags/"+name); err != nil {
-				return nil, fmt.Errorf("package %q produces an invalid tag %q: %w", pkg, name, err)
-			}
 			if earlier, ok := seen[name]; ok && earlier != commit {
 				return nil, fmt.Errorf("tag %s is requested for multiple commits", name)
 			}
@@ -111,7 +108,7 @@ func PlanTags(root, base, head string) ([]ReleaseTag, error) {
 func checkReleaseTag(root string, tag *ReleaseTag) error {
 	tag.Exists = false
 	if _, err := tagGit(root, "check-ref-format", "refs/tags/"+tag.Name); err != nil {
-		return err
+		return fmt.Errorf("package %q produces an invalid tag %q: %w", tag.Package, tag.Name, err)
 	}
 	refs, err := tagGit(root, "for-each-ref", "--format=%(refname)", "refs/tags/"+tag.Name)
 	if err != nil {
@@ -231,7 +228,7 @@ func tagVersions(root, commit string) (map[string]Package, error) {
 		packages = append(packages, pkg)
 	}
 	sort.Slice(packages, func(i, j int) bool { return packages[i].Path < packages[j].Path })
-	return versions, tagPrefixError(packages)
+	return versions, joinProblems(TagPrefixProblems(packages))
 }
 
 // A nil selection reads all packages; otherwise only selected manifests are read.

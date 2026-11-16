@@ -35,7 +35,12 @@ func repositoryURL(raw string, remote bool) string {
 	return "https://" + u.Host + path
 }
 
+// sourceRepository returns the repository to link release notes to. Shallow
+// clones get none: their history cannot tell which commit added a note.
 func sourceRepository(root string, config RepositoryConfig) string {
+	if sourceGit(root, "rev-parse", "--is-shallow-repository") != "false" {
+		return ""
+	}
 	if config.Repository != "" {
 		return config.Repository
 	}
@@ -55,7 +60,7 @@ func sourceGit(root string, args ...string) string {
 // Merge diffs are explicitly against the first parent, so a feature branch's
 // individual commits resolve to the merge that brought the note onto this branch.
 func sourceLink(root, repository, path string) string {
-	if repository == "" || sourceGit(root, "rev-parse", "--is-shallow-repository") != "false" {
+	if repository == "" {
 		return ""
 	}
 	if sourceGit(root, "ls-tree", "-z", "--name-only", "HEAD", "--", path) != path+"\x00" {

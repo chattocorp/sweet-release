@@ -30,7 +30,7 @@ func TestReleaseEntryBreakingAndSharedSections(t *testing.T) {
 		{Type: "docs", Body: "Remove the old guide.", Breaking: true},
 		{Type: "hidden", Body: "Hidden.", Breaking: true},
 	}}
-	got := releaseEntry(status, []ChangeType{{Name: "feature", Section: "Changes"}, {Name: "fix", Section: "Changes"}, {Name: "docs", Section: "Documentation"}})
+	got := releaseEntryWithLinks(status, []ChangeType{{Name: "feature", Section: "Changes"}, {Name: "fix", Section: "Changes"}, {Name: "docs", Section: "Documentation"}}, nil)
 	want := "## 2.0.0\n\n### Changes\n\n- ⚠️ **BREAKING CHANGE:** A new API.\n- ⚠️ **BREAKING CHANGE:** Remove the old API.\n- A fix.\n- Another fix.\n\n### Documentation\n\n- ⚠️ **BREAKING CHANGE:** Remove the old guide.\n- Update the guide.\n"
 	if got != want {
 		t.Fatal(got)
@@ -42,7 +42,7 @@ func TestReleaseEntryMultilineBullet(t *testing.T) {
 		{Type: "feature", Body: "Add an API.\nWith more details.\n\nExample:\n\n```go\nCall()\n```\n\n- Nested item\n- Another item"},
 		{Type: "feature", Body: "Another change."},
 	}}
-	got := releaseEntry(status, []ChangeType{{Name: "feature", Section: "Features"}})
+	got := releaseEntryWithLinks(status, []ChangeType{{Name: "feature", Section: "Features"}}, nil)
 	want := "## 1.1.0\n\n### Features\n\n- Add an API.\n  With more details.\n\n  Example:\n\n  ```go\n  Call()\n  ```\n\n  - Nested item\n  - Another item\n- Another change.\n"
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)

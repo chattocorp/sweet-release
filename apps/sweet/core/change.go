@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -24,12 +23,12 @@ func CreateChange(dir, changeType string, content io.Reader) (string, error) {
 	if _, err := parsePackageManifest(data); err != nil {
 		return "", fmt.Errorf("%s: %w", manifest, err)
 	}
-	types, err := ChangeTypes(dir)
+	config, err := LoadRepositoryConfig(dir)
 	if err != nil {
 		return "", err
 	}
-	if !slices.Contains(types, changeType) {
-		return "", fmt.Errorf("unknown change type %q; available types: %s", changeType, strings.Join(types, ", "))
+	if err := CheckChangeType(config.ChangeTypes, changeType); err != nil {
+		return "", err
 	}
 	metadata, err := yaml.Marshal(struct {
 		Type string `yaml:"type"`

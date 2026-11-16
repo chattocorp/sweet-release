@@ -86,8 +86,8 @@ func TestTagPrefixesAndCollisions(t *testing.T) {
 	if _, err := DiscoverPackages(root); err == nil {
 		t.Fatal("discovery accepted duplicate prefixes")
 	}
-	if problems, err := DiagnosePackages(root); err != nil || len(problems) != 1 {
-		t.Fatalf("diagnosis: %v, %v", problems, err)
+	if packages, _, err := discoverPackages(root); err != nil || len(TagPrefixProblems(packages)) != 1 {
+		t.Fatalf("diagnosis: %v, %v", packages, err)
 	}
 	if _, err := PlanTags(root, base, head); err == nil {
 		t.Fatal("range accepted duplicate prefixes")

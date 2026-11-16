@@ -45,7 +45,7 @@ func TestStatusPackages(t *testing.T) {
 	if code := run([]string{"status"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("status: %d: %s", code, &stderr)
 	}
-	want := "PACKAGE VERSION BUMP NEXT . 0.1.0 pkg/api 1.2.3 minor 1.3.0 pkg/api/client 2.0.0-beta.1 none 2.0.0"
+	want := "PACKAGE VERSION BUMP NEXT . 0.1.0 pkg/api 1.2.3 patch 1.2.4 pkg/api/client 2.0.0-beta.1 none 2.0.0"
 	if got := strings.Join(strings.Fields(stdout.String()), " "); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}

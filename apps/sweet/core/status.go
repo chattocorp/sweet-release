@@ -2,12 +2,9 @@ package core
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -69,7 +66,6 @@ func repositoryStatus(root string, config RepositoryConfig) ([]PackageStatus, er
 	for _, typ := range types {
 		policies[typ.Name] = typ.Bump
 	}
-	rank := map[string]int{"none": 0, "patch": 1, "minor": 2, "major": 3}
 	notes := make(map[string][]string)
 	for _, path := range paths {
 		dir := filepath.Dir(path)
@@ -99,11 +95,11 @@ func repositoryStatus(root string, config RepositoryConfig) ([]PackageStatus, er
 				if strings.HasPrefix(pkg.Version, "0.") {
 					breakingBump = "minor"
 				}
-				if rank[breakingBump] > rank[bump] {
+				if bumpRank[breakingBump] > bumpRank[bump] {
 					bump = breakingBump
 				}
 			}
-			if rank[bump] > rank[status.Bump] {
+			if bumpRank[bump] > bumpRank[status.Bump] {
 				status.Bump = bump
 			}
 		}
@@ -120,38 +116,6 @@ func repositoryStatus(root string, config RepositoryConfig) ([]PackageStatus, er
 		statuses = append(statuses, status)
 	}
 	return statuses, nil
-}
-
-// ReadChanges reads direct .sweet/*.md children in filename order.
-// Missing note directories and locally deleted tracked notes are treated as empty.
-func ReadChanges(root string, pkg Package) ([]Change, error) {
-	changes, problems, err := readChanges(root, pkg)
-	if err != nil {
-		return nil, err
-	}
-	var errs []error
-	for _, problem := range problems {
-		errs = append(errs, problem)
-	}
-	return changes, errors.Join(errs...)
-}
-
-func readChanges(root string, pkg Package) ([]Change, []Problem, error) {
-	dir := filepath.Join(root, pkg.Path)
-	output, err := exec.Command("git", "-C", dir, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", ".sweet/").Output()
-	if err != nil {
-		return nil, nil, fmt.Errorf("read changes for %s: %w", pkg.Path, err)
-	}
-	paths := strings.Split(string(output), "\x00")
-	sort.Strings(paths)
-	var names []string
-	for _, path := range paths {
-		if filepath.Dir(path) == ".sweet" && filepath.Ext(path) == ".md" {
-			names = append(names, filepath.ToSlash(filepath.Join(pkg.Path, path)))
-		}
-	}
-	changes, problems := changesFromFiles(root, names)
-	return changes, problems, nil
 }
 
 func changesFromFiles(root string, paths []string) ([]Change, []Problem) {
@@ -203,14 +167,8 @@ func parseChange(data []byte) (Change, error) {
 		Type     yaml.Node `yaml:"type"`
 		Breaking yaml.Node `yaml:"breaking"`
 	}
-	decoder := yaml.NewDecoder(bytes.NewReader(bytes.Join(lines[1:end], nil)))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&metadata); err != nil {
-		return change, fmt.Errorf("decode change frontmatter: %w", err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return change, fmt.Errorf("expected one YAML frontmatter document")
+	if err := decodeYAMLDocument(bytes.Join(lines[1:end], nil), &metadata, true, "change frontmatter"); err != nil {
+		return change, err
 	}
 	if metadata.Type.Kind != yaml.ScalarNode || metadata.Type.Tag != "!!str" || strings.TrimSpace(metadata.Type.Value) == "" {
 		return change, fmt.Errorf("change type must be a non-empty string")
@@ -227,6 +185,9 @@ func parseChange(data []byte) (Change, error) {
 	change.Body = string(bytes.Join(lines[end+1:], nil))
 	return change, nil
 }
+
+// bumpRank orders bump levels from no release to a major release.
+var bumpRank = map[string]int{"none": 0, "patch": 1, "minor": 2, "major": 3}
 
 var versionPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`)
 
@@ -261,8 +222,7 @@ func nextVersion(version, bump, prerelease string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	rank := map[string]int{"none": 0, "patch": 1, "minor": 2, "major": 3}
-	level, ok := rank[bump]
+	level, ok := bumpRank[bump]
 	if !ok {
 		return "", fmt.Errorf("invalid bump %q", bump)
 	}

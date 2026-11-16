@@ -1,7 +1,7 @@
 # Sweet repository configuration
 types:
   fix:
-    bump: minor
+    bump: patch
     section: Fixes
   feature:
     bump: minor

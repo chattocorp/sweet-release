@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/chattocorp/sweet-release/apps/sweet/core"
@@ -49,14 +48,11 @@ func newChangeCommandWithPrompt(prompt func(*cobra.Command) (string, error)) *co
 			} else if err != nil {
 				return fmt.Errorf("check package %s: %w", dir, err)
 			}
-			policies, err := core.LoadChangeTypes(dir)
+			config, err := core.LoadRepositoryConfig(dir)
 			if err != nil {
 				return err
 			}
-			types := make([]string, len(policies))
-			for i, policy := range policies {
-				types[i] = policy.Name
-			}
+			policies := config.ChangeTypes
 			selectedType := changeType
 			if selectedType == "" {
 				selectedType, err = selectChangeType(cmd, policies)
@@ -64,8 +60,9 @@ func newChangeCommandWithPrompt(prompt func(*cobra.Command) (string, error)) *co
 					return err
 				}
 			}
-			if !slices.Contains(types, selectedType) {
-				return fmt.Errorf("unknown change type %q; available types: %s", selectedType, strings.Join(types, ", "))
+			// Fail before prompting for a description.
+			if err := core.CheckChangeType(policies, selectedType); err != nil {
+				return err
 			}
 			var content io.Reader = strings.NewReader("")
 			useEditor := false

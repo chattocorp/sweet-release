@@ -86,7 +86,7 @@ Package names are not required. Dependency propagation is not yet implemented.
 ```yaml
 types:
   fix:
-    bump: minor
+    bump: patch
     section: Fixes
   feature:
     bump: minor

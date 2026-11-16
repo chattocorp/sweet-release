@@ -10,7 +10,7 @@ description: Configure change types, packages, and version file updates.
 ```yaml
 types:
   fix:
-    bump: minor
+    bump: patch
     section: Fixes
   feature:
     bump: minor

@@ -88,13 +88,13 @@ func TestRepositoryStatusUsesLoadedConfig(t *testing.T) {
 
 func TestChangeTypeConfiguration(t *testing.T) {
 	for _, data := range []string{"types: []", "types: null", "types: fix", "types: [fix, fix]", "types: [1]", "types: ['bad name']", "types: [Fix]", "types: [", "types: [fix]\n---\ntypes: [feature]", "types: [fix]\ntypes: [feature]"} {
-		if _, err := parseChangeTypes([]byte(data)); err == nil {
+		if _, err := parseTypes([]byte(data)); err == nil {
 			t.Errorf("accepted invalid configuration: %s", data)
 		}
 	}
 	for _, data := range []string{defaultRepositoryConfig, "{}"} {
-		types, err := parseChangeTypes([]byte(data))
-		want := []ChangeType{{"fix", "minor", "Fixes"}, {"feature", "minor", "Features"}, {"chore", "none", ""}, {"refactor", "none", ""}, {"performance", "patch", "Performance"}}
+		types, err := parseTypes([]byte(data))
+		want := []ChangeType{{"fix", "patch", "Fixes"}, {"feature", "minor", "Features"}, {"chore", "none", ""}, {"refactor", "none", ""}, {"performance", "patch", "Performance"}}
 		if err != nil || !reflect.DeepEqual(types, want) {
 			t.Fatalf("types = %v, error = %v", types, err)
 		}
@@ -122,9 +122,9 @@ func TestRepositoryChangeTypes(t *testing.T) {
 	}
 	// Configuration follows the target package, regardless of the caller's PWD.
 	t.Chdir(t.TempDir())
-	types, err := ChangeTypes(dir)
-	if err != nil || !reflect.DeepEqual(types, []string{"security", "docs"}) {
-		t.Fatalf("types = %v, error = %v", types, err)
+	repository, err := LoadRepositoryConfig(dir)
+	if err != nil || !reflect.DeepEqual(repository.ChangeTypes, []ChangeType{{"security", "patch", "Security"}, {"docs", "none", "Documentation"}}) {
+		t.Fatalf("types = %v, error = %v", repository.ChangeTypes, err)
 	}
 	if _, err := CreateChange(dir, "fix", strings.NewReader("body")); err == nil || !strings.Contains(err.Error(), "unknown change type") {
 		t.Fatalf("unexpected error: %v", err)
@@ -144,13 +144,13 @@ func TestRepositoryChangeTypes(t *testing.T) {
 	if err := os.WriteFile(config, []byte("types: []"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ChangeTypes(dir); err == nil || !strings.Contains(err.Error(), config) {
+	if _, err := LoadRepositoryConfig(dir); err == nil || !strings.Contains(err.Error(), config) {
 		t.Fatalf("missing configuration path: %v", err)
 	}
 }
 
 func TestChangeTypePolicies(t *testing.T) {
-	types, err := parseChangeTypes([]byte(`types:
+	types, err := parseTypes([]byte(`types:
   breaking:
     bump: major
     section: Breaking changes
@@ -175,8 +175,13 @@ func TestChangeTypePolicies(t *testing.T) {
 		"types: {fix: {sections: Fixes}}", "types: {fix: {}, fix: {}}",
 		"types: {Fix: {}}", "types: {1: {}}",
 	} {
-		if _, err := parseChangeTypes([]byte(policy)); err == nil {
+		if _, err := parseTypes([]byte(policy)); err == nil {
 			t.Errorf("accepted %s", policy)
 		}
 	}
+}
+
+func parseTypes(data []byte) ([]ChangeType, error) {
+	config, err := parseRepositoryConfig(data)
+	return config.ChangeTypes, err
 }
