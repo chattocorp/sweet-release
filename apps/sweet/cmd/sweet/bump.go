@@ -14,7 +14,7 @@ func newBumpCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bump [package...]",
 		Short: "Update versions and changelogs, then consume release notes",
-		Long:  "Prepare releases for the given package directories, or choose pending releases interactively.\nRepositories with one package select it automatically.\nUse --all to prepare all packages. This changes local files without committing or publishing.",
+		Long:  "Prepare releases for the given package directories, or choose pending releases interactively.\nRepositories with one package select it automatically.\nUse --all to prepare all packages. This changes local files without committing or publishing.\n\nSet prerelease: <label> in a package's .sweet.yml to release prereleases such as 1.3.0-beta.0.\nRemove it to release the final version, whose changelog combines all prereleases since the last stable release.",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if all && len(args) > 0 {
@@ -77,7 +77,7 @@ func bumpPicker(statuses []core.PackageStatus) pickerModel {
 	model.selected = map[string]bool{}
 	model.annotations = map[string]string{}
 	for _, status := range statuses {
-		if len(status.Problems) > 0 || len(status.Changes) == 0 || status.Bump == "none" || status.NextVersion == "" {
+		if len(status.Problems) > 0 || status.NextVersion == "" || status.NextVersion == status.Version {
 			continue
 		}
 		model.options = append(model.options, status.Path)

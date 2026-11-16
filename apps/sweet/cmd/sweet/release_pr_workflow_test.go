@@ -66,7 +66,17 @@ func TestReleasePRWorkflowMatrix(t *testing.T) {
 	}
 }
 
-func TestReleasePRPreparation(t *testing.T) {
+// releasePRHarness runs release-pr.py against a Git repository with this test
+// binary standing in for the sweet CLI.
+type releasePRHarness struct {
+	t                       *testing.T
+	root, temporary, script string
+	sweet                   string
+	env                     []string
+}
+
+func newReleasePRHarness(t *testing.T) *releasePRHarness {
+	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("workflow uses a shell wrapper on Linux")
 	}
@@ -74,11 +84,52 @@ func TestReleasePRPreparation(t *testing.T) {
 		t.Skip("workflow requires python3")
 	}
 	_, source, _, _ := runtime.Caller(0)
-	script := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/release-pr.py")
 	binary, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
+	h := &releasePRHarness{t: t, root: t.TempDir(), temporary: t.TempDir(),
+		script: filepath.Join(filepath.Dir(source), "../../../../.github/scripts/release-pr.py"),
+		env:    append(os.Environ(), "SWEET_TAG_TEST_PROCESS=1", "SWEET_TEST_BINARY="+binary)}
+	h.sweet = filepath.Join(h.temporary, "sweet")
+	h.write(h.sweet, "#!/bin/sh\nexec \"$SWEET_TEST_BINARY\" -test.run='^TestTagPlannerProcess$' -- \"$@\"\n")
+	h.git("init")
+	h.git("config", "user.name", "Test")
+	h.git("config", "user.email", "test@example.com")
+	return h
+}
+
+func (h *releasePRHarness) invoke(input string, name string, args ...string) ([]byte, error) {
+	h.t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir, cmd.Env, cmd.Stdin = h.root, h.env, strings.NewReader(input)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		h.t.Logf("%s %v: %s", name, args, &stderr)
+	}
+	return out, err
+}
+
+func (h *releasePRHarness) git(args ...string) {
+	h.t.Helper()
+	if _, err := h.invoke("", "git", args...); err != nil {
+		h.t.Fatal(err)
+	}
+}
+
+func (h *releasePRHarness) write(path, content string) {
+	h.t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		h.t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+		h.t.Fatal(err)
+	}
+}
+
+func TestReleasePRPreparation(t *testing.T) {
 	for _, tc := range []struct {
 		name, strategy, selected string
 		invalid, changed         bool
@@ -91,40 +142,9 @@ func TestReleasePRPreparation(t *testing.T) {
 		{"invalid", "per-package", ".", true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root, temporary := t.TempDir(), t.TempDir()
-			env := append(os.Environ(), "SWEET_TAG_TEST_PROCESS=1", "SWEET_TEST_BINARY="+binary)
-			invoke := func(input string, name string, args ...string) ([]byte, error) {
-				t.Helper()
-				cmd := exec.Command(name, args...)
-				cmd.Dir, cmd.Env, cmd.Stdin = root, env, strings.NewReader(input)
-				var stderr bytes.Buffer
-				cmd.Stderr = &stderr
-				out, err := cmd.Output()
-				if err != nil {
-					t.Logf("%s %v: %s", name, args, &stderr)
-				}
-				return out, err
-			}
-			git := func(args ...string) {
-				t.Helper()
-				if _, err := invoke("", "git", args...); err != nil {
-					t.Fatal(err)
-				}
-			}
-			write := func(path, content string) {
-				t.Helper()
-				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
-					t.Fatal(err)
-				}
-			}
-			sweet := filepath.Join(temporary, "sweet")
-			write(sweet, "#!/bin/sh\nexec \"$SWEET_TEST_BINARY\" -test.run='^TestTagPlannerProcess$' -- \"$@\"\n")
-			git("init")
-			git("config", "user.name", "Test")
-			git("config", "user.email", "test@example.com")
+			h := newReleasePRHarness(t)
+			root, temporary, script, sweet := h.root, h.temporary, h.script, h.sweet
+			invoke, git, write := h.invoke, h.git, h.write
 			for _, path := range []string{".", "nested/client with spaces", "-flag", "idle"} {
 				write(filepath.Join(root, path, ".sweet.yml"), "version: 0.0.0\n")
 				if path == "." {
@@ -343,4 +363,54 @@ esac
 			}
 		})
 	}
+}
+
+func TestReleasePRPrerelease(t *testing.T) {
+	h := newReleasePRHarness(t)
+	manifest := filepath.Join(h.root, "api/.sweet.yml")
+	h.write(filepath.Join(h.root, "api/.sweet/a.md"), "---\ntype: feature\n---\nBeta feature.\n")
+	h.write(manifest, "version: 1.2.3\nprerelease: beta\n")
+	h.git("add", ".")
+	h.git("commit", "-m", "Start beta")
+	prepare := func(wantTitle string, wantBody ...string) {
+		t.Helper()
+		job := `{"branch":"sweet/release-package-api","title":"chore: release api","packages":["api"]}`
+		destination := filepath.Join(h.temporary, "result")
+		out, err := h.invoke("", "python3", h.script, "prepare", h.sweet, job, destination)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if wantTitle == "" {
+			if strings.TrimSpace(string(out)) != "false" {
+				t.Fatalf("unexpected PR: %s", out)
+			}
+			return
+		}
+		title, _ := os.ReadFile(filepath.Join(destination, "title.txt"))
+		body, _ := os.ReadFile(filepath.Join(destination, "body.md"))
+		if strings.TrimSpace(string(out)) != "true" || string(title) != wantTitle {
+			t.Fatalf("prepare = %s, title = %q, want %q", out, title, wantTitle)
+		}
+		for _, want := range wantBody {
+			if !strings.Contains(string(body), want) {
+				t.Fatalf("body missing %q:\n%s", want, body)
+			}
+		}
+		h.git("add", "-A")
+		h.git("commit", "-m", wantTitle)
+	}
+	prepare("chore: release api 1.3.0-beta.0", "## api 1.3.0-beta.0", "- Beta feature.")
+	prepare("") // No new notes for the current channel.
+	h.write(filepath.Join(h.root, "api/.sweet/b.md"), "---\ntype: fix\n---\nBeta fix.\n")
+	h.git("add", "-A")
+	h.git("commit", "-m", "Add fix")
+	prepare("chore: release api 1.3.0-beta.1", "- Beta fix.")
+	data, err := os.ReadFile(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.write(manifest, strings.Replace(string(data), "prerelease: beta\n", "", 1))
+	h.git("commit", "-am", "Finalize")
+	prepare("chore: release api 1.3.0", "## api 1.3.0", "- Beta feature.", "- Beta fix.")
+	prepare("")
 }

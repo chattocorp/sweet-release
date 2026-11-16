@@ -108,7 +108,7 @@ func repositoryStatus(root string, config RepositoryConfig) ([]PackageStatus, er
 			}
 		}
 		if pkg.Version != "" {
-			status.NextVersion, err = nextVersion(pkg.Version, status.Bump)
+			status.NextVersion, err = nextVersion(pkg.Version, status.Bump, pkg.Prerelease)
 			if err != nil {
 				status.Problems = append(status.Problems, Problem{Path: filepath.ToSlash(filepath.Join(pkg.Path, ".sweet.yml")), Message: err.Error()})
 			}
@@ -230,27 +230,107 @@ func parseChange(data []byte) (Change, error) {
 
 var versionPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`)
 
-func nextVersion(version, bump string) (string, error) {
+// parseVersion validates a semantic version and returns its regexp submatches:
+// major, minor, patch, and prerelease at indexes 1 through 4.
+func parseVersion(version string) ([]string, error) {
 	parts := versionPattern.FindStringSubmatch(version)
 	if parts == nil {
-		return "", fmt.Errorf("invalid semantic version %q", version)
+		return nil, fmt.Errorf("invalid semantic version %q", version)
 	}
 	for _, identifier := range strings.Split(parts[4], ".") {
-		if len(identifier) > 1 && identifier[0] == '0' && strings.Trim(identifier, "0123456789") == "" {
-			return "", fmt.Errorf("invalid semantic version %q", version)
+		if isNumeric(identifier) && len(identifier) > 1 && identifier[0] == '0' {
+			return nil, fmt.Errorf("invalid semantic version %q", version)
 		}
 	}
-	if bump == "none" {
-		return version, nil
+	return parts, nil
+}
+
+func isNumeric(s string) bool { return s != "" && strings.Trim(s, "0123456789") == "" }
+
+func isPrerelease(version string) bool {
+	parts, err := parseVersion(version)
+	return err == nil && parts[4] != ""
+}
+
+// nextVersion applies a bump to version. With a prerelease label, the result is a
+// prerelease of the bumped version; without one, a prerelease is finalized.
+// A prerelease already covers bumps up to its own level: 1.3.0-beta.0 includes
+// minor and patch changes, so only its counter advances.
+func nextVersion(version, bump, prerelease string) (string, error) {
+	parts, err := parseVersion(version)
+	if err != nil {
+		return "", err
 	}
-	index := map[string]int{"major": 1, "minor": 2, "patch": 3}[bump]
-	if index == 0 {
+	rank := map[string]int{"none": 0, "patch": 1, "minor": 2, "major": 3}
+	level, ok := rank[bump]
+	if !ok {
 		return "", fmt.Errorf("invalid bump %q", bump)
 	}
-	number, _ := new(big.Int).SetString(parts[index], 10)
-	parts[index] = number.Add(number, big.NewInt(1)).String()
-	for i := index + 1; i <= 3; i++ {
-		parts[i] = "0"
+	current := parts[4]
+	covered := 0
+	if current != "" {
+		covered = 1
+		if parts[3] == "0" {
+			covered = 2
+			if parts[2] == "0" {
+				covered = 3
+			}
+		}
 	}
-	return strings.Join(parts[1:4], "."), nil
+	core := parts[1:4]
+	if level > covered {
+		index := 3 - level
+		number, _ := new(big.Int).SetString(core[index], 10)
+		core[index] = number.Add(number, big.NewInt(1)).String()
+		for i := index + 1; i < 3; i++ {
+			core[i] = "0"
+		}
+	}
+	next, coreChanged := strings.Join(core, "."), level > covered
+	switch {
+	case prerelease == "" && (coreChanged || current != ""):
+		return next, nil
+	case prerelease != "" && coreChanged:
+		return next + "-" + prerelease + ".0", nil
+	case prerelease == "" || current == "":
+		return version, nil // Nothing to release.
+	}
+	// The version is already a prerelease of the target version.
+	counter, sameChannel := strings.CutPrefix(current, prerelease+".")
+	sameChannel = sameChannel && isNumeric(counter)
+	if level == 0 && (sameChannel || current == prerelease) {
+		return version, nil // No notes for the current channel.
+	}
+	if sameChannel {
+		number, _ := new(big.Int).SetString(counter, 10)
+		return next + "-" + prerelease + "." + number.Add(number, big.NewInt(1)).String(), nil
+	}
+	candidate := prerelease + ".0"
+	if comparePrerelease(candidate, current) <= 0 {
+		return "", fmt.Errorf("prerelease %q would not advance %s; choose a later label or remove prerelease", prerelease, version)
+	}
+	return next + "-" + candidate, nil
+}
+
+// comparePrerelease orders non-empty prerelease strings by semver precedence.
+func comparePrerelease(a, b string) int {
+	x, y := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(x) && i < len(y); i++ {
+		if x[i] == y[i] {
+			continue
+		}
+		xn, yn := isNumeric(x[i]), isNumeric(y[i])
+		switch {
+		case xn && yn:
+			p, _ := new(big.Int).SetString(x[i], 10)
+			q, _ := new(big.Int).SetString(y[i], 10)
+			return p.Cmp(q)
+		case xn:
+			return -1
+		case yn:
+			return 1
+		}
+		return strings.Compare(x[i], y[i])
+	}
+	return len(x) - len(y)
 }
