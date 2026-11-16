@@ -26,7 +26,7 @@ func PackageChangelog(dir, version string) (string, error) {
 	}
 	if version == "" {
 		for _, heading := range changelogHeadings(string(data)) {
-			if _, err := nextVersion(heading.title, "none"); err == nil {
+			if _, err := parseVersion(heading.title); err == nil {
 				version = heading.title
 				break
 			}

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode"
@@ -18,10 +19,11 @@ import (
 
 // Package identifies a release package by its repository-relative path.
 type Package struct {
-	Path      string  `json:"path"`
-	Version   string  `json:"version"`
-	Name      string  `json:"name,omitempty"`
-	TagPrefix *string `json:"tagPrefix,omitempty"`
+	Path       string  `json:"path"`
+	Version    string  `json:"version"`
+	Name       string  `json:"name,omitempty"`
+	TagPrefix  *string `json:"tagPrefix,omitempty"`
+	Prerelease string  `json:"prerelease,omitempty"`
 }
 
 // ReleasePrefix is the literal text before the version in a release tag.
@@ -147,19 +149,14 @@ func packagesFromFiles(root string, paths []string) ([]Package, []Problem, error
 		if os.IsNotExist(err) {
 			continue
 		} // A tracked manifest may have been deleted locally.
-		var version string
-		var name string
-		var prefix *string
+		var manifest packageManifest
 		if err == nil {
-			var manifest packageManifest
 			manifest, err = parsePackageManifest(content)
-			version, name = manifest.Version, manifest.Name
-			prefix = manifest.TagPrefix
 		}
 		if err != nil {
 			problems = append(problems, Problem{Path: path, Message: err.Error()})
 		}
-		packages = append(packages, Package{Path: filepath.ToSlash(filepath.Dir(path)), Version: version, Name: name, TagPrefix: prefix})
+		packages = append(packages, Package{Path: filepath.ToSlash(filepath.Dir(path)), Version: manifest.Version, Name: manifest.Name, TagPrefix: manifest.TagPrefix, Prerelease: manifest.Prerelease})
 	}
 	sort.Slice(packages, func(i, j int) bool { return packages[i].Path < packages[j].Path })
 	return packages, problems, nil
@@ -175,15 +172,17 @@ type packageManifest struct {
 	Version      string
 	Name         string
 	VersionFiles []VersionFile
+	Prerelease   string
 }
 
 func parsePackageManifest(content []byte) (packageManifest, error) {
 	var result packageManifest
 	var manifest struct {
-		Version   yaml.Node `yaml:"version"`
-		Name      yaml.Node `yaml:"name"`
-		Files     yaml.Node `yaml:"version-files"`
-		TagPrefix yaml.Node `yaml:"tag-prefix"`
+		Version    yaml.Node `yaml:"version"`
+		Name       yaml.Node `yaml:"name"`
+		Files      yaml.Node `yaml:"version-files"`
+		TagPrefix  yaml.Node `yaml:"tag-prefix"`
+		Prerelease yaml.Node `yaml:"prerelease"`
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	if err := decoder.Decode(&manifest); err != nil {
@@ -197,7 +196,7 @@ func parsePackageManifest(content []byte) (packageManifest, error) {
 	if version.Kind != yaml.ScalarNode || version.Tag != "!!str" || strings.TrimSpace(version.Value) == "" || strings.ContainsAny(version.Value, " \t\r\n") {
 		return result, fmt.Errorf("version must be a non-empty string without whitespace")
 	}
-	if _, err := nextVersion(version.Value, "none"); err != nil {
+	if _, err := parseVersion(version.Value); err != nil {
 		return result, err
 	}
 	files, err := versionFilesFromNode(manifest.Files)
@@ -218,8 +217,17 @@ func parsePackageManifest(content []byte) (packageManifest, error) {
 		}
 		prefix = &n.Value
 	}
-	return packageManifest{Version: version.Value, Name: name, VersionFiles: files, TagPrefix: prefix}, nil
+	var prerelease string
+	if n := manifest.Prerelease; n.Kind != 0 {
+		if n.Kind != yaml.ScalarNode || n.Tag != "!!str" || !prereleasePattern.MatchString(n.Value) || isNumeric(n.Value) {
+			return result, fmt.Errorf("prerelease must be a non-numeric label of letters, digits, and hyphens, such as beta")
+		}
+		prerelease = n.Value
+	}
+	return packageManifest{Version: version.Value, Name: name, VersionFiles: files, TagPrefix: prefix, Prerelease: prerelease}, nil
 }
+
+var prereleasePattern = regexp.MustCompile(`^[0-9A-Za-z-]+$`)
 
 func readPackageName(content []byte) (string, error) {
 	manifest, err := parsePackageManifest(content)

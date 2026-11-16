@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -79,7 +80,7 @@ func prepareReleases(root string, paths []string) (*releasePreparation, error) {
 	plan := &releasePreparation{}
 	repository := sourceRepository(root, config)
 	for _, status := range selected {
-		if len(status.Changes) == 0 || status.Bump == "none" {
+		if status.NextVersion == status.Version {
 			continue
 		}
 		manifest, err := readReleaseEdit(filepath.Join(root, status.Path, ".sweet.yml"), false)
@@ -143,7 +144,7 @@ func prepareReleases(root string, paths []string) (*releasePreparation, error) {
 		for _, change := range status.Changes {
 			links[change.Path] = sourceLink(root, repository, change.Path)
 		}
-		entry := releaseEntryWithLinks(status, types, links)
+		entry := releaseEntryWithLinks(status, types, links, prereleaseHistory(status, string(changelog.before))...)
 		changelog.after = []byte(insertRelease(introduction, entry))
 		edits = append(edits, manifest, changelog)
 		for _, change := range status.Changes {
@@ -227,56 +228,135 @@ func releaseEntry(status PackageStatus, types []ChangeType) string {
 	return releaseEntryWithLinks(status, types, nil)
 }
 
-func releaseEntryWithLinks(status PackageStatus, types []ChangeType, links map[string]string) string {
-	var out strings.Builder
-	fmt.Fprintf(&out, "## %s\n", status.NextVersion)
-	var sections []string
-	byType := map[string]string{}
+// prereleaseHistory returns the bodies of the prerelease entries at the top of
+// the changelog, newest first, when status finalizes a prerelease.
+func prereleaseHistory(status PackageStatus, changelog string) []string {
+	if !isPrerelease(status.Version) || isPrerelease(status.NextVersion) {
+		return nil
+	}
+	var bodies []string
+	// Stop at the first other heading, typically the last stable release.
+	for _, heading := range changelogHeadings(changelog) {
+		if !isPrerelease(heading.title) {
+			break
+		}
+		if body, err := ChangelogRelease(changelog, heading.title); err == nil {
+			bodies = append(bodies, body)
+		}
+	}
+	return bodies
+}
+
+// releaseEntryWithLinks renders a changelog entry for pending notes, merged with
+// the items of earlier changelog entries in history (e.g. finalized prereleases).
+func releaseEntryWithLinks(status PackageStatus, types []ChangeType, links map[string]string, history ...string) string {
+	sections := newReleaseSections(types)
+	section := map[string]string{}
+	for _, typ := range types {
+		section[typ.Name] = typ.Section
+	}
+	for _, change := range status.Changes {
+		body := strings.TrimSpace(change.Body)
+		if change.Breaking {
+			body = breakingMarker + body
+		}
+		if section[change.Type] == "" || body == "" {
+			continue
+		}
+		lines := strings.Split(body, "\n")
+		if link := links[change.Path]; link != "" {
+			if len(lines) == 1 || isProse(body) {
+				last := len(lines) - 1
+				lines[last] = strings.TrimRight(lines[last], " \t\r") + " (" + link + ")"
+			} else {
+				lines = append(lines, "", "("+link+")")
+			}
+		}
+		lines[0] = "- " + lines[0]
+		for i := 1; i < len(lines); i++ {
+			if lines[i] != "" {
+				lines[i] = "  " + lines[i]
+			}
+		}
+		sections.add(section[change.Type], strings.Join(lines, "\n"))
+	}
+	for _, body := range history {
+		sections.addEntry(body)
+	}
+	return sections.render(status.NextVersion)
+}
+
+const breakingMarker = "⚠️ **BREAKING CHANGE:** "
+
+// releaseSections collects changelog items by section, breaking changes first.
+type releaseSections struct {
+	order           []string
+	breaking, other map[string][]string
+}
+
+func newReleaseSections(types []ChangeType) *releaseSections {
+	r := &releaseSections{breaking: map[string][]string{}, other: map[string][]string{}}
 	seen := map[string]bool{}
 	for _, typ := range types {
-		byType[typ.Name] = typ.Section
 		if typ.Section != "" && !seen[typ.Section] {
-			sections = append(sections, typ.Section)
+			r.order = append(r.order, typ.Section)
 			seen[typ.Section] = true
 		}
 	}
-	for _, section := range sections {
-		var breakingBodies []string
-		var bodies []string
-		for _, change := range status.Changes {
-			if byType[change.Type] != section {
-				continue
-			}
-			body := strings.TrimSpace(change.Body)
-			if change.Breaking {
-				body = "⚠️ **BREAKING CHANGE:** " + body
-			}
-			if body != "" {
-				lines := strings.Split(body, "\n")
-				if link := links[change.Path]; link != "" {
-					if len(lines) == 1 || isProse(body) {
-						last := len(lines) - 1
-						lines[last] = strings.TrimRight(lines[last], " \t\r") + " (" + link + ")"
-					} else {
-						lines = append(lines, "", "("+link+")")
-					}
-				}
-				lines[0] = "- " + lines[0]
-				for i := 1; i < len(lines); i++ {
-					if lines[i] != "" {
-						lines[i] = "  " + lines[i]
-					}
-				}
-				if change.Breaking {
-					breakingBodies = append(breakingBodies, strings.Join(lines, "\n"))
-				} else {
-					bodies = append(bodies, strings.Join(lines, "\n"))
-				}
-			}
+	return r
+}
+
+func (r *releaseSections) add(section, item string) {
+	if section == "" && !slices.Contains(r.order, "") {
+		r.order = append([]string{""}, r.order...) // Unsectioned items come first.
+	} else if !slices.Contains(r.order, section) {
+		r.order = append(r.order, section)
+	}
+	if strings.HasPrefix(item, "- "+breakingMarker) {
+		r.breaking[section] = append(r.breaking[section], item)
+	} else {
+		r.other[section] = append(r.other[section], item)
+	}
+}
+
+// addEntry adds the items of a rendered changelog entry body. Items start with
+// "- " at column zero; indented and blank lines continue the current item.
+func (r *releaseSections) addEntry(body string) {
+	section := ""
+	var item []string
+	flush := func() {
+		if text := strings.TrimRight(strings.Join(item, "\n"), " \t\r\n"); text != "" {
+			r.add(section, text)
 		}
-		bodies = append(breakingBodies, bodies...)
-		if len(bodies) > 0 {
-			fmt.Fprintf(&out, "\n### %s\n\n%s\n", section, strings.Join(bodies, "\n"))
+		item = nil
+	}
+	for _, line := range strings.Split(body, "\n") {
+		switch {
+		case strings.HasPrefix(line, "### "):
+			flush()
+			section = strings.TrimSpace(line[4:])
+		case strings.HasPrefix(line, "- "):
+			flush()
+			item = []string{line}
+		case item != nil || strings.TrimSpace(line) != "":
+			item = append(item, line)
+		}
+	}
+	flush()
+}
+
+func (r *releaseSections) render(version string) string {
+	var out strings.Builder
+	fmt.Fprintf(&out, "## %s\n", version)
+	for _, section := range r.order {
+		items := append(slices.Clone(r.breaking[section]), r.other[section]...)
+		if len(items) == 0 {
+			continue
+		}
+		if section == "" {
+			fmt.Fprintf(&out, "\n%s\n", strings.Join(items, "\n"))
+		} else {
+			fmt.Fprintf(&out, "\n### %s\n\n%s\n", section, strings.Join(items, "\n"))
 		}
 	}
 	return out.String()

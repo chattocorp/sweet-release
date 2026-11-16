@@ -174,7 +174,7 @@ func versionReplacements(data []byte, target VersionFile, version string) ([]ver
 		return []versionReplacement{replacement}, err
 	case "text":
 		old := strings.TrimSpace(string(data))
-		if _, err := nextVersion(old, "none"); err != nil {
+		if _, err := parseVersion(old); err != nil {
 			return nil, fmt.Errorf("text file must contain only a semantic version: %w", err)
 		}
 		start := bytes.Index(data, []byte(old))
@@ -231,7 +231,7 @@ func yamlVersionReplacement(data []byte, keys []string, version string, isJSON b
 	if node.Kind != yaml.ScalarNode || node.Tag != "!!str" || node.Anchor != "" || node.Style&(yaml.TaggedStyle|yaml.LiteralStyle|yaml.FoldedStyle) != 0 {
 		return zero, fmt.Errorf("version target must be a plain or quoted string without anchors, aliases, or explicit tags")
 	}
-	if _, err := nextVersion(node.Value, "none"); err != nil {
+	if _, err := parseVersion(node.Value); err != nil {
 		return zero, err
 	}
 	start, err := yamlSourceOffset(data, node.Line, node.Column)
@@ -314,7 +314,7 @@ func tomlVersionReplacement(data []byte, keys []string, version string) (version
 	if !ok {
 		return zero, fmt.Errorf("version target must be a string")
 	}
-	if _, err := nextVersion(old, "none"); err != nil {
+	if _, err := parseVersion(old); err != nil {
 		return zero, err
 	}
 	var parser unstable.Parser
@@ -376,7 +376,7 @@ func annotatedReplacements(data []byte, version string) ([]versionReplacement, e
 			}
 			match := matches[0]
 			old := string(line[match[0]:match[1]])
-			if _, err := nextVersion(old, "none"); err != nil {
+			if _, err := parseVersion(old); err != nil {
 				return nil, fmt.Errorf("line %d: %w", number+1, err)
 			}
 			// Do not replace a substring of another token (for example 1.2.3.4).

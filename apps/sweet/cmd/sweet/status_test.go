@@ -45,7 +45,7 @@ func TestStatusPackages(t *testing.T) {
 	if code := run([]string{"status"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("status: %d: %s", code, &stderr)
 	}
-	want := "PACKAGE VERSION BUMP NEXT . 0.1.0 pkg/api 1.2.3 minor 1.3.0 pkg/api/client 2.0.0-beta.1"
+	want := "PACKAGE VERSION BUMP NEXT . 0.1.0 pkg/api 1.2.3 minor 1.3.0 pkg/api/client 2.0.0-beta.1 none 2.0.0"
 	if got := strings.Join(strings.Fields(stdout.String()), " "); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -67,7 +67,7 @@ func TestStatusPackages(t *testing.T) {
 		}
 	}
 	table, _, _ := strings.Cut(stdout.String(), "\nProblems:")
-	if got := strings.Join(strings.Fields(table), " "); got != "PACKAGE VERSION BUMP NEXT . 0.1.0 invalid pkg/api 1.2.3 invalid pkg/api/client 2.0.0-beta.1" {
+	if got := strings.Join(strings.Fields(table), " "); got != "PACKAGE VERSION BUMP NEXT . 0.1.0 invalid pkg/api 1.2.3 invalid pkg/api/client 2.0.0-beta.1 none 2.0.0" {
 		t.Errorf("table with problems = %q", got)
 	}
 	write(".sweet.yml", "{}\n")

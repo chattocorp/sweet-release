@@ -9,23 +9,48 @@ import (
 )
 
 func TestNextVersion(t *testing.T) {
-	for _, tt := range []struct{ version, bump, want string }{
-		{"1.2.3", "none", "1.2.3"},
-		{"1.2.3", "patch", "1.2.4"},
-		{"1.2.3", "minor", "1.3.0"},
-		{"1.2.3", "major", "2.0.0"},
-		{"0.0.0", "minor", "0.1.0"},
-		{"1.2.3-beta.1+build", "patch", "1.2.4"},
-		{"1.2.3-beta.1+build", "none", "1.2.3-beta.1+build"},
-		{"99999999999999999999.0.0", "major", "100000000000000000000.0.0"},
+	for _, tt := range []struct{ version, bump, pre, want string }{
+		{"1.2.3", "none", "", "1.2.3"},
+		{"1.2.3", "patch", "", "1.2.4"},
+		{"1.2.3", "minor", "", "1.3.0"},
+		{"1.2.3", "major", "", "2.0.0"},
+		{"0.0.0", "minor", "", "0.1.0"},
+		{"99999999999999999999.0.0", "major", "", "100000000000000000000.0.0"},
+		// Finalizing a prerelease: bumps it already covers keep the base.
+		{"1.2.3-beta.1+build", "none", "", "1.2.3"},
+		{"1.2.3-beta.1+build", "patch", "", "1.2.3"},
+		{"1.2.3-beta.1", "minor", "", "1.3.0"},
+		{"1.3.0-beta.1", "minor", "", "1.3.0"},
+		{"1.3.0-beta.1", "major", "", "2.0.0"},
+		{"2.0.0-beta.1", "major", "", "2.0.0"},
+		// Entering and advancing a prerelease.
+		{"1.2.3", "none", "beta", "1.2.3"},
+		{"1.2.3", "minor", "beta", "1.3.0-beta.0"},
+		{"1.3.0-beta.0", "none", "beta", "1.3.0-beta.0"},
+		{"1.3.0-beta.0", "patch", "beta", "1.3.0-beta.1"},
+		{"1.3.0-beta.9", "minor", "beta", "1.3.0-beta.10"},
+		{"1.3.0-beta.1", "major", "beta", "2.0.0-beta.0"},
+		{"1.3.0-beta", "none", "beta", "1.3.0-beta"},
+		{"1.3.0-beta", "patch", "beta", "1.3.0-beta.0"},
+		// Switching channels must advance the version.
+		{"1.3.0-beta.2", "none", "rc", "1.3.0-rc.0"},
+		{"1.3.0-alpha.2", "patch", "beta", "1.3.0-beta.0"},
+		{"1.3.0-rc.0", "major", "beta", "2.0.0-beta.0"},
+		{"0.3.0", "minor", "beta", "0.4.0-beta.0"},
+		{"0.4.0-beta.0", "minor", "beta", "0.4.0-beta.1"},
 	} {
-		got, err := nextVersion(tt.version, tt.bump)
+		got, err := nextVersion(tt.version, tt.bump, tt.pre)
 		if err != nil || got != tt.want {
-			t.Errorf("nextVersion(%q, %q) = %q, %v; want %q", tt.version, tt.bump, got, err, tt.want)
+			t.Errorf("nextVersion(%q, %q, %q) = %q, %v; want %q", tt.version, tt.bump, tt.pre, got, err, tt.want)
+		}
+	}
+	for _, tt := range []struct{ version, pre string }{{"1.3.0-rc.0", "beta"}, {"1.3.0-beta.1", "alpha"}} {
+		if got, err := nextVersion(tt.version, "patch", tt.pre); err == nil {
+			t.Errorf("nextVersion(%q, patch, %q) = %q; want error", tt.version, tt.pre, got)
 		}
 	}
 	for _, version := range []string{"v1.2.3", "1.2", "01.2.3", "1.2.3-01", "1.2.3-", "1.2.3+", "foo"} {
-		if _, err := nextVersion(version, "none"); err == nil {
+		if _, err := parseVersion(version); err == nil {
 			t.Errorf("accepted %q", version)
 		}
 	}

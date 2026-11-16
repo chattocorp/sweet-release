@@ -35,7 +35,7 @@ func newStatusCommand() *cobra.Command {
 			fmt.Fprintln(out, "PACKAGE\tVERSION\tBUMP\tNEXT")
 			for _, pkg := range packages {
 				bump, next := pkg.Bump, pkg.NextVersion
-				if len(pkg.Changes) == 0 {
+				if len(pkg.Changes) == 0 && pkg.NextVersion == pkg.Version {
 					bump, next = "", ""
 				}
 				if len(pkg.Problems) > 0 {
