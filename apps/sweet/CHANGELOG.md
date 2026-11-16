@@ -1,5 +1,22 @@
 # Sweet Release Changelog
 
+## 0.4.0-beta.0
+
+### Fixes
+
+- Keep changelog source attribution inline after the final paragraph of multi-paragraph prose notes. Preserve paragraph breaks and keep attribution separate for structured Markdown such as code blocks, lists, and tables. ([#48](https://github.com/chattocorp/sweet-release/pull/48))
+- Make `sweet doctor` fail on invalid pending release notes, package configuration,
+  and tag ownership problems, with file paths in diagnostics. Validate release
+  preparation without changing files, including configured version targets.
+  Keep `sweet status` informational and its JSON problems format unchanged.
+  Add a reusable `doctor.yml` workflow for pull request CI. ([#50](https://github.com/chattocorp/sweet-release/pull/50))
+
+### Features
+
+- Release prereleases by setting `prerelease: <label>` in a package's `.sweet.yml`, such as `1.3.0-beta.0` from `1.2.3`. Remove the label to finalize; the final changelog entry combines all changes since the last stable release. Bumping an existing prerelease now keeps its base version when the bump is already covered, so `2.0.0-beta.1` finalizes to `2.0.0` instead of `3.0.0`.
+
+  A package whose manifest version is already a prerelease but has no `prerelease` label is now finalized on its next bump. Add the label to keep releasing prereleases. ([#51](https://github.com/chattocorp/sweet-release/pull/51))
+
 ## 0.3.0
 
 ### Fixes
