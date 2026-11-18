@@ -132,7 +132,7 @@ jobs:
           title: ${{ steps.prepare.outputs.title }}
           body-path: ${{ runner.temp }}/release/body.md
       - name: Record desired release PR
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sweet-release-result-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index }}
           path: ${{ runner.temp }}/release/desired.json
@@ -152,7 +152,7 @@ jobs:
         uses: $/.github/actions/bootstrap
         with:
           install: 'false'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: needs.plan.outputs.prs != '[]'
         with:
           pattern: sweet-release-result-${{ github.run_id }}-${{ github.run_attempt }}-*
