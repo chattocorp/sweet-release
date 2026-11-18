@@ -97,3 +97,8 @@ collection. Follow the
 or updating issues. Read [issues/MEANS.md](../issues/MEANS.md) for the collection
 schema and workflow before use. Use
 `--path issues` from the repository root; Means does not search parent directories.
+
+## Evaluate the setup instructions
+
+Use the [setup prompt evaluation](test-agent-setup.md) to try the README in a
+fresh agent session and check the resulting repository.
