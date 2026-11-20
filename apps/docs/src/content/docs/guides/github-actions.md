@@ -271,7 +271,8 @@ package in the repository. Other packages' releases never become Latest
 automatically. Pass `--latest` or `--latest=false` to decide yourself.
 
 Reruns are safe, including after publication: they reuse the release and replace
-its assets. Serialize jobs for the same tag, as above, so two runs do not create
+its assets. `gh` deletes each old asset before uploading its replacement, so a
+failed upload leaves that file missing until a rerun succeeds. Serialize jobs for the same tag, as above, so two runs do not create
 two drafts. Use `--draft` to create and upload without publishing, then run the
 command again without it to publish. `--title` and `--notes-file` replace the
 default title (the package `name` and version, or the tag) and notes for a new

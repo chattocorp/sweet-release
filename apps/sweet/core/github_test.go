@@ -133,9 +133,10 @@ func TestGitHubReleaseRetries(t *testing.T) {
 func TestGitHubReleaseDraft(t *testing.T) {
 	root := githubFixture(t, map[string]string{".sweet.yml": "version: 1.0.0\n"})
 	gh := &fakeGitHub{releases: map[string]*fakeRelease{}}
-	result, err := publishGitHubRelease(root, gh, GitHubReleaseOptions{Tag: "v1.0.0", Draft: true, Title: "Custom", Notes: "Given"})
+	empty := ""
+	result, err := publishGitHubRelease(root, gh, GitHubReleaseOptions{Tag: "v1.0.0", Draft: true, Title: "Custom", Notes: &empty})
 	release := gh.releases["v1.0.0"]
-	if err != nil || result.Published || !release.draft || release.title != "Custom" || release.notes != "Given" {
+	if err != nil || result.Published || !release.draft || release.title != "Custom" || release.notes != "" {
 		t.Fatalf("draft: %+v, %v, %+v", result, err, release)
 	}
 }
@@ -168,8 +169,9 @@ func TestGitHubReleaseLatestAndPrerelease(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := githubFixture(t, tc.files)
+			notes := "notes"
 			gh := &fakeGitHub{releases: map[string]*fakeRelease{}, remote: tc.remote}
-			result, err := publishGitHubRelease(root, gh, GitHubReleaseOptions{Tag: tc.tag, Notes: "notes", Latest: tc.latest})
+			result, err := publishGitHubRelease(root, gh, GitHubReleaseOptions{Tag: tc.tag, Notes: &notes, Latest: tc.latest})
 			if (err != nil) != tc.fail {
 				t.Fatalf("error: %v", err)
 			}

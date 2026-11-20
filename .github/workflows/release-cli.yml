@@ -41,5 +41,10 @@ jobs:
           (cd dist && sha256sum --check checksums.txt)
       - name: Publish GitHub Release
         # Creates or reuses a draft, replaces its assets, then publishes it.
+        # Leave published releases alone: replacing live archives could break them.
         run: |
+          if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)" == false ]]; then
+            echo "$TAG is already published." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           go run ./apps/sweet/cmd/sweet github release "$TAG" dist/*.tar.gz dist/*.zip dist/checksums.txt >> "$GITHUB_STEP_SUMMARY"

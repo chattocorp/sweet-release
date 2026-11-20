@@ -14,9 +14,10 @@ import (
 type GitHubReleaseOptions struct {
 	Tag    string
 	Assets []string
-	// Title and Notes replace the defaults when non-empty.
+	// Title replaces the default when non-empty; Notes replaces the
+	// changelog notes when non-nil, even if empty.
 	Title string
-	Notes string
+	Notes *string
 	// Draft stops after creating the release and uploading assets.
 	Draft bool
 	// Latest overrides the automatic Latest selection when non-nil.
@@ -71,8 +72,10 @@ func publishGitHubRelease(root string, gh githubReleases, opts GitHubReleaseOpti
 		return result, err
 	}
 	if result.State == "missing" {
-		notes := opts.Notes
-		if notes == "" {
+		var notes string
+		if opts.Notes != nil {
+			notes = *opts.Notes
+		} else {
 			if notes, err = PackageChangelog(filepath.Join(root, filepath.FromSlash(pkg.Path)), version); err != nil {
 				return result, err
 			}

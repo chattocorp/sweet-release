@@ -320,4 +320,7 @@ GitHub's `--latest=false` never demotes the current Latest release.
 Flags: `--draft` (create and upload only), `--title` (default: `<name> <version>`
 with a manifest name, otherwise the tag), `--notes-file` (notes for a new release
 instead of the changelog), and `--latest[=false]`. Concurrent runs for the same
-missing release can create duplicate drafts; serialize them per tag.
+missing release can create duplicate drafts; serialize them per tag. `gh`
+deletes each same-name asset before uploading its replacement, so a failed
+upload during a rerun of a published release leaves that asset missing until
+the next successful rerun. Skip published releases if that matters.

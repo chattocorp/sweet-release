@@ -32,7 +32,8 @@ func newGitHubCommand() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				opts.Notes = string(data)
+				notes := string(data)
+				opts.Notes = &notes
 			}
 			if cmd.Flags().Changed("latest") {
 				opts.Latest = &latest
