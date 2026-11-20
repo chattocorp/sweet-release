@@ -63,11 +63,12 @@ For GitHub repositories, add the reusable workflows described in
 - `doctor.yml` validates release notes in pull requests.
 - `bump.yml` opens release PRs from pending notes. It needs a `RELEASE_PR_TOKEN`
   secret; tell the user to create it.
-- `tag.yml` tags versions after release PRs are merged.
+- `tag.yml` tags versions after release PRs are merged and returns the tags,
+  so publishing jobs can run in the same workflow.
 
 Pin all three to the same revision. Publishing (building artifacts, uploading
 packages, deploying) is project-specific. Ask the user before adding
-[release workflows](/guides/github-actions/#release-from-tags).
+[publishing jobs](/guides/github-actions/#publish-releases).
 
 ## 4. Keep managing releases
 

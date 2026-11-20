@@ -11,8 +11,9 @@ Sweet provides three reusable workflows:
 | `bump.yml` | Create and update release PRs from pending change notes. |
 | `tag.yml` | Tag package versions committed by merged release PRs. |
 
-Publishing is yours: add workflows that run on the pushed tags and build,
-upload, or deploy each package however it needs.
+Publishing is yours: fan out over the tags that `tag.yml` returns, in the same
+run, and build, upload, or deploy each package however it needs.
+[`sweet github release`](#publish-a-github-release) handles GitHub Releases.
 
 ## Version the integration
 
@@ -131,8 +132,6 @@ jobs:
     permissions:
       contents: write
     uses: chattocorp/sweet-release/.github/workflows/tag.yml@main
-    secrets:
-      release-token: ${{ secrets.RELEASE_PR_TOKEN }}
 ```
 
 The job fetches remote tags and runs `sweet git tag` for the pushed commit range,
@@ -151,46 +150,134 @@ owns its commit range.
 | --- | --- | --- |
 | `sweet-version` | `source` | CLI to use: `source`, a release tag, or `latest`. |
 
-The required `release-token` needs Contents write access. Use a personal or
-GitHub App token: tags pushed with `GITHUB_TOKEN` do not trigger other workflows.
-The `tags` output is a JSON array of `package`, `version`, `tag`, and `commit`.
+The optional `release-token` secret needs Contents write access and defaults to
+`GITHUB_TOKEN`. That is all you need when you
+[publish in the same run](#publish-releases). Tags pushed with `GITHUB_TOKEN` do
+not trigger other workflows, so pass a personal or GitHub App token only if
+separate workflows run on the pushed tags.
 
-## Release from tags
+| Output | Content |
+| --- | --- |
+| `tags` | JSON array with one entry per tag in the range. |
+| `packages` | JSON object from package path (`.` for the root) to its newest entry. |
 
-Tags use `<directory-name>@<version>`, or `v<version>` for a root package, unless
-the package sets `tag-prefix`. Trigger a release workflow on the tags you want to
-publish. For example, to publish a Go CLI in `apps/cli` with GitHub Release notes
-from its changelog:
+Each entry looks like this:
+
+```json
+{
+  "package": "apps/cli",
+  "version": "1.3.0",
+  "tag": "cli@1.3.0",
+  "commit": "<sha>",
+  "prerelease": false,
+  "latest": true
+}
+```
+
+`prerelease` is true for versions such as `1.3.0-beta.0`. `latest` is true when
+the version is the highest stable version among the package's tags, including
+older ones, so a rerun after a newer release reports `false`. Use it for
+per-package channels such as a Docker `latest` tag. `packages` returns `null`
+for a package without a tag in this run; if a push releases a package twice,
+`tags` lists both and `packages` keeps the newer one.
+
+## Publish releases
+
+Publish from the same workflow run that tags. Pass each tag to a reusable
+workflow in your repository. No personal token is needed:
 
 ```yaml
-name: Release CLI
+jobs:
+  tag:
+    # As above.
+
+  # One job per tag, for packages that publish the same way.
+  release:
+    needs: tag
+    if: needs.tag.outputs.tags != '[]'
+    strategy:
+      matrix:
+        release: ${{ fromJSON(needs.tag.outputs.tags) }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ matrix.release.tag }}
+      commit: ${{ matrix.release.commit }}
+
+  # One job for a specific package. A job-level if cannot read matrix values,
+  # so select the package from the packages output instead.
+  cli:
+    needs: tag
+    if: fromJSON(needs.tag.outputs.packages)['apps/cli'] != null
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-cli.yml
+    with:
+      tag: ${{ fromJSON(needs.tag.outputs.packages)['apps/cli'].tag }}
+      commit: ${{ fromJSON(needs.tag.outputs.packages)['apps/cli'].commit }}
+```
+
+The called workflow checks out `inputs.commit`, builds, and publishes. Rerunning
+a failed job retries the publication for that tag. Keep the
+"call `tag.yml` after checks pass" order, so only checked commits are released.
+
+If you would rather trigger separate workflows with `on: push: tags`, pass a
+personal or GitHub App token as `release-token` (for example
+`release-token: ${{ secrets.RELEASE_PR_TOKEN }}`).
+
+### Publish a GitHub Release
+
+`sweet github release <tag> [assets...]` publishes a GitHub Release for a Sweet
+tag. A called workflow could end like this:
+
+```yaml
 on:
-  push:
-    tags: ['cli@*']
+  workflow_call:
+    inputs:
+      tag: { type: string, required: true }
+      commit: { type: string, required: true }
 permissions:
   contents: write
+concurrency:
+  group: github-release-${{ inputs.tag }}
+  cancel-in-progress: false
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-      TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.commit }}
       - uses: chattocorp/sweet-release/.github/actions/bootstrap@main
-      - run: |
-          version=${TAG#cli@}
-          # Build your assets into dist/ here.
-          sweet changelog --version "$version" -- apps/cli > notes.md
-          flags=(); [[ "${version%%+*}" == *-* ]] && flags+=(--prerelease)
-          gh release create "$TAG" dist/* --verify-tag --notes-file notes.md "${flags[@]}"
+      # Build your assets into dist/ here.
+      - run: sweet github release "$TAG" dist/*
+        env:
+          TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
 ```
 
-The `--prerelease` flag marks versions such as `1.3.0-beta.0` as GitHub
-prereleases, so they never become the Latest release.
+The command:
 
-Release workflows should be safe to rerun; for example, skip publication when
-`gh release view "$TAG"` shows a published release.
+1. Creates a draft release for the existing tag, with notes from the package's
+   changelog entry for that version, or reuses the draft or published release.
+2. Uploads the assets, replacing files with the same name.
+3. Publishes the release, marks prerelease versions as prereleases, and sets
+   whether it is the repository's Latest release.
+
+GitHub has one Latest release per repository. Sweet makes a release Latest only
+when it is the highest stable version of the root package, or of the only
+package in the repository. Other packages' releases never become Latest
+automatically. Pass `--latest` or `--latest=false` to decide yourself.
+
+Reruns are safe, including after publication: they reuse the release and replace
+its assets. Serialize jobs for the same tag, as above, so two runs do not create
+two drafts. Use `--draft` to create and upload without publishing, then run the
+command again without it to publish. `--title` and `--notes-file` replace the
+default title (the package `name` and version, or the tag) and notes for a new
+release. The command needs the [`gh` CLI](https://cli.github.com/), which
+GitHub-hosted runners include, and a token with Contents write access in
+`GH_TOKEN`.
 
 ## Maintaining this integration
 
@@ -203,5 +290,6 @@ main CI for the exact dispatched commit and creates an immutable
 `workflows-v1.0.0` tag. Existing tags cannot be moved. Publish the tag after
 merging, then pin consumers to that tag or its merged commit SHA.
 
-Sweet itself calls `tag.yml` from its CI. Its `release-cli.yml` workflow
-publishes the CLI from each `sweet@*` tag with GoReleaser archives.
+Sweet itself calls `tag.yml` from its CI with a personal token. Its
+`release-cli.yml` workflow runs on each `sweet@*` tag, builds GoReleaser archives,
+and publishes them with `sweet github release`.
