@@ -170,14 +170,15 @@ Each entry looks like this:
   "tag": "cli@1.3.0",
   "commit": "<sha>",
   "prerelease": false,
-  "latest": true
+  "highest": true
 }
 ```
 
-`prerelease` is true for versions such as `1.3.0-beta.0`. `latest` is true when
+`prerelease` is true for versions such as `1.3.0-beta.0`. `highest` is true when
 the version is the highest stable version among the package's tags, including
 older ones, so a rerun after a newer release reports `false`. Use it for
-per-package channels such as a Docker `latest` tag. `packages` returns `null`
+per-package channels such as a Docker `latest` tag. It is not GitHub's
+repository-wide Latest release; `sweet github release` decides that. `packages` returns `null`
 for a package without a tag in this run; if a push releases a package twice,
 `tags` lists both and `packages` keeps the newer one.
 
@@ -260,7 +261,8 @@ jobs:
 The command:
 
 1. Creates a draft release for the existing tag, with notes from the package's
-   changelog entry for that version, or reuses the draft or published release.
+   changelog entry for that version, or reuses an existing draft. A published
+   release is left unchanged (see below).
 2. Uploads the assets, replacing files with the same name.
 3. Publishes the release, marks prerelease versions as prereleases, and sets
    whether it is the repository's Latest release.
@@ -270,9 +272,12 @@ when it is the highest stable version of the root package, or of the only
 package in the repository. Other packages' releases never become Latest
 automatically. Pass `--latest` or `--latest=false` to decide yourself.
 
-Reruns are safe, including after publication: they reuse the release and replace
-its assets. `gh` deletes each old asset before uploading its replacement, so a
-failed upload leaves that file missing until a rerun succeeds. Serialize jobs for the same tag, as above, so two runs do not create
+Reruns are safe. They reuse a draft and replace its assets. An already published
+release is left unchanged: no uploads and no edits, because publication already
+set its prerelease and Latest state in one step. Pass `--replace-published` to
+upload to a published release anyway and reapply that state. `gh` deletes each
+old asset before uploading its replacement, so a failed upload leaves that file
+missing from the live release until a rerun succeeds. Serialize jobs for the same tag, as above, so two runs do not create
 two drafts. Use `--draft` to create and upload without publishing, then run the
 command again without it to publish. `--title` and `--notes-file` replace the
 default title (the package `name` and version, or the tag) and notes for a new

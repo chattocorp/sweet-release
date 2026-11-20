@@ -303,12 +303,17 @@ match the current manifest. Ambiguous or unknown tags fail before any request.
 1. `gh release view` finds the release state. A missing release is created with
    `gh release create --verify-tag --draft --latest=false`, the title, and notes
    from `CHANGELOG.md` for that version (as `sweet changelog --version`). A
-   missing changelog entry fails before creation. Drafts and published releases
-   are reused unchanged, so a rerun never creates a second release.
+   missing changelog entry fails before creation. A draft is reused, so a rerun
+   never creates a second release. A published release is left unchanged and
+   the command stops here, unless `--replace-published` is given.
 2. `gh release upload --clobber` uploads any assets, replacing same-name files.
 3. Without `--draft`, `gh release edit --draft=false --prerelease=<p> --latest=<l>`
-   publishes. This also runs for an already published release, so reruns reapply
-   the computed state.
+   publishes. With `--replace-published`, this also runs for an already
+   published release and reapplies the computed state.
+
+Published releases are skipped by default because one `gh release edit` sets
+draft, prerelease, and Latest together: a published release already has its
+state, and its assets may be live downloads.
 
 `prerelease` is true when the version has a prerelease suffix. Without `--latest`,
 Latest is true only for a stable version of the main package (the root package,
@@ -319,8 +324,8 @@ GitHub's `--latest=false` never demotes the current Latest release.
 
 Flags: `--draft` (create and upload only), `--title` (default: `<name> <version>`
 with a manifest name, otherwise the tag), `--notes-file` (notes for a new release
-instead of the changelog), and `--latest[=false]`. Concurrent runs for the same
-missing release can create duplicate drafts; serialize them per tag. `gh`
-deletes each same-name asset before uploading its replacement, so a failed
-upload during a rerun of a published release leaves that asset missing until
-the next successful rerun. Skip published releases if that matters.
+instead of the changelog), `--latest[=false]`, and `--replace-published`.
+Concurrent runs for the same missing release can create duplicate drafts;
+serialize them per tag. `gh` deletes each same-name asset before uploading its
+replacement, so with `--replace-published` a failed upload leaves that asset
+missing from the live release until the next successful rerun.

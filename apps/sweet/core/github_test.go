@@ -120,10 +120,17 @@ func TestGitHubReleaseRetries(t *testing.T) {
 	if err != nil || result.State != "draft" || gh.releases["v1.0.0"].draft || gh.releases["v1.0.0"].title != "v1.0.0" {
 		t.Fatalf("retry: %+v, %v, %+v", result, err, gh.releases["v1.0.0"])
 	}
-	// A retry after publication replaces the assets and keeps the release.
+	// A retry after publication leaves the release and its assets alone.
+	calls := len(gh.calls)
 	result, err = publishGitHubRelease(root, gh, opts)
-	if err != nil || result.State != "published" || !result.Published || gh.releases["v1.0.0"].assets["a"] != 2 {
-		t.Fatalf("published retry: %+v, %v", result, err)
+	if err != nil || result.State != "published" || result.Published || len(gh.calls) != calls || gh.releases["v1.0.0"].assets["a"] != 1 {
+		t.Fatalf("published retry: %+v, %v, %v", result, err, gh.calls[calls:])
+	}
+	// With ReplacePublished, it replaces the assets and reapplies publication.
+	opts.ReplacePublished = true
+	result, err = publishGitHubRelease(root, gh, opts)
+	if err != nil || result.State != "published" || !result.Published || gh.releases["v1.0.0"].assets["a"] != 2 || !gh.releases["v1.0.0"].latest {
+		t.Fatalf("replace published: %+v, %v", result, err)
 	}
 	if got := strings.Count(strings.Join(gh.calls, ","), "create"); got != 1 {
 		t.Fatalf("created %d releases", got)

@@ -22,6 +22,9 @@ type GitHubReleaseOptions struct {
 	Draft bool
 	// Latest overrides the automatic Latest selection when non-nil.
 	Latest *bool
+	// ReplacePublished uploads to and edits an already published release.
+	// Without it, a published release is left unchanged.
+	ReplacePublished bool
 }
 
 // GitHubReleaseResult describes what PublishGitHubRelease did.
@@ -32,7 +35,8 @@ type GitHubReleaseResult struct {
 	Prerelease bool
 	Latest     bool
 	// State is the release state before this run: missing, draft, or published.
-	State     string
+	State string
+	// Published reports that this run published or edited the release.
 	Published bool
 }
 
@@ -49,6 +53,7 @@ type githubReleases interface {
 
 // PublishGitHubRelease creates or reuses a draft GitHub release for a Sweet tag,
 // uploads assets with replacement, and publishes it unless opts.Draft is set.
+// Published releases are left unchanged unless opts.ReplacePublished is set.
 // It uses the gh CLI with its usual authentication (GH_TOKEN) and repository
 // detection (GH_REPO or the Git remote).
 func PublishGitHubRelease(root string, opts GitHubReleaseOptions) (GitHubReleaseResult, error) {
@@ -70,6 +75,11 @@ func publishGitHubRelease(root string, gh githubReleases, opts GitHubReleaseOpti
 	}
 	if result.State, err = gh.state(opts.Tag); err != nil {
 		return result, err
+	}
+	if result.State == "published" && !opts.ReplacePublished {
+		// Publication sets draft, prerelease, and Latest in one edit, so a
+		// published release needs no repair. Its assets may be live downloads.
+		return result, nil
 	}
 	if result.State == "missing" {
 		var notes string

@@ -58,8 +58,8 @@ earlier pushes remain. Rerunning the original CI run safely retries
 the original range after a failure; later pushes do not automatically backfill it.
 
 The `tags` output lists `package` (the path), `version`, `tag`, `commit`,
-`prerelease`, and `latest` for each planned tag. The script computes
-`prerelease` from the version's suffix and `latest` as "stable and not exceeded
+`prerelease`, and `highest` for each planned tag. The script computes
+`prerelease` from the version's suffix and `highest` as "stable and not exceeded
 by any stable local tag with the same prefix" after fetching remote tags; it
 does not depend on newer CLI output. The `packages` output maps each package path
 to its last entry in `tags`.

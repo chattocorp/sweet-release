@@ -82,7 +82,7 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 	write(filepath.Join(bindir, "sweet"), "#!/bin/sh\nexec \"$SWEET_TEST_BINARY\" -test.run='^TestTagPlannerProcess$' -- \"$@\"\n")
 	type entry struct {
 		Package, Version, Tag, Commit string
-		Prerelease, Latest            bool
+		Prerelease, Highest           bool
 	}
 	invoke := func(base, head string, fail bool) ([]entry, map[string]*entry) {
 		t.Helper()
@@ -112,12 +112,20 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 			if err := json.Unmarshal([]byte(strings.TrimPrefix(lines[1], "packages=")), &packages); err != nil {
 				t.Fatal(err)
 			}
-			if len(tags) != 8 || len(packages) != 8 {
+			if len(tags) < 8 || len(packages) != 8 {
 				t.Fatalf("wrong tag list: %s", data)
 			}
+			newest := map[string]entry{}
 			for _, tag := range tags {
-				if tag.Package == "" || tag.Version == "" || !strings.HasSuffix(tag.Tag, tag.Version) || tag.Commit != head || *packages[tag.Package] != tag {
+				if tag.Package == "" || tag.Version == "" || !strings.HasSuffix(tag.Tag, tag.Version) || tag.Commit == "" {
 					t.Fatalf("incomplete tag metadata: %s", data)
+				}
+				newest[tag.Package] = tag
+			}
+			// packages holds each package's newest entry, introduced at head here.
+			for pkg, tag := range newest {
+				if packages[pkg] == nil || *packages[pkg] != tag || tag.Commit != head {
+					t.Fatalf("wrong packages output: %s", data)
 				}
 			}
 			return tags, packages
@@ -125,7 +133,7 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 		return nil, nil
 	}
 	tags, packages := invoke(base, head, false)
-	if !tags[0].Latest || tags[0].Prerelease || packages["pkg/api"].Tag != "api@0.1.0" || packages["pkg/missing"] != nil {
+	if len(tags) != 8 || !tags[0].Highest || tags[0].Prerelease || packages["pkg/api"].Tag != "api@0.1.0" || packages["pkg/missing"] != nil {
 		t.Fatalf("release metadata: %+v", tags)
 	}
 	for _, name := range []string{"v0.1.0", "api@0.1.0"} {
@@ -163,19 +171,31 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 			t.Fatalf("retry did not finish tag push: %s", got)
 		}
 	}
-	// A newer remote stable tag makes a rerun of an older range not latest.
+	// A newer remote stable tag makes a rerun of an older range not highest.
 	git(remote, "tag", "v0.10.0", base)
 	beta := commit("0.3.0-beta.0")
 	tags, _ = invoke(next, beta, false)
 	for _, tag := range tags {
-		if !tag.Prerelease || tag.Latest {
+		if !tag.Prerelease || tag.Highest {
 			t.Fatalf("prerelease metadata: %+v", tag)
 		}
 	}
 	tags, _ = invoke(head, next, false)
 	for _, tag := range tags {
-		if tag.Prerelease || tag.Latest != (tag.Package != ".") {
+		if tag.Prerelease || tag.Highest != (tag.Package != ".") {
 			t.Fatalf("older stable metadata: %+v", tag)
+		}
+	}
+	// Two releases of each package in one push: tags lists both, packages the newer.
+	first := commit("0.4.0")
+	second := commit("0.5.0")
+	tags, packages = invoke(beta, second, false)
+	if len(tags) != 16 || packages["pkg/api"].Version != "0.5.0" || !packages["pkg/api"].Highest {
+		t.Fatalf("repeated release: %+v", packages["pkg/api"])
+	}
+	for _, tag := range tags {
+		if tag.Version == "0.4.0" && (tag.Commit != first || tag.Highest) {
+			t.Fatalf("older release in range: %+v", tag)
 		}
 	}
 }

@@ -18,8 +18,8 @@ then publishes.
 
 Jobs for the same tag are serialized. A build failure stops publication; an
 upload failure leaves an unpublished draft. Rerun the failed tag workflow to
-retry. It rebuilds the assets, skips an already published release, and
-otherwise reuses the draft and replaces its assets. The tag is kept.
+retry. It rebuilds the assets; `sweet github release` leaves an already published
+release unchanged and otherwise reuses the draft and replaces its assets. The tag is kept.
 
 Versions with prerelease suffixes are marked as prereleases. The CLI is the
 repository's only package, so its highest stable version becomes Latest.

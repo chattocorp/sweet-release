@@ -82,12 +82,19 @@ func TestGitHubReleaseCommand(t *testing.T) {
 		t.Fatalf("notes: %q", data)
 	}
 
-	// Rerun after publication: no new release, assets replaced, publication reapplied.
-	if out := invoke("v1.0.0", "a.tgz"); !strings.HasPrefix(out, "Reused published release v1.0.0\n") {
+	// Rerun after publication: only the state lookup, nothing changes.
+	if out := invoke("v1.0.0", "a.tgz"); !strings.HasPrefix(out, "Left published release v1.0.0 unchanged") {
 		t.Fatalf("rerun: %q", out)
 	}
-	if got := calls(); strings.Contains(got, "release create") || !strings.Contains(got, "release upload v1.0.0 --clobber -- a.tgz\n") {
+	if got := calls(); got != "release view v1.0.0 --json isDraft --jq .isDraft\n" {
 		t.Fatalf("rerun calls: %s", got)
+	}
+	// --replace-published: no new release, assets replaced, publication reapplied.
+	if out := invoke("v1.0.0", "--replace-published", "a.tgz"); !strings.HasPrefix(out, "Reused published release v1.0.0\nUploaded 1 assets\nPublished") {
+		t.Fatalf("replace: %q", out)
+	}
+	if got := calls(); strings.Contains(got, "release create") || !strings.Contains(got, "release upload v1.0.0 --clobber -- a.tgz\n") || !strings.Contains(got, "release edit") {
+		t.Fatalf("replace calls: %s", got)
 	}
 
 	// A draft run against an existing draft only uploads; --latest=false skips the tag lookup.
