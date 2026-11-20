@@ -147,11 +147,12 @@ separate PRs do not coordinate shared writes. The workflow verifies changed
 checkouts and cleans up obsolete PRs only after all jobs succeed. Make corrections
 through `main`, since the next run can overwrite edits on generated branches.
 
-In this repository, merging a release PR starts CI, tagging, and creation of a
-draft GitHub Release. CLI releases build and upload binaries before Sweet publishes
-the draft; docs releases publish their notes without assets. After publication,
-the release workflow marks the highest published
-stable CLI version as GitHub's Latest release. It includes historical CLI tag
-prefixes when comparing versions, but excludes drafts and prereleases. Publishing
-an older version does not displace a newer stable release. If Latest promotion
-fails, rerun the release workflow; already published binaries are left unchanged.
+In this repository, merging a release PR starts CI and tagging. The `sweet@*`
+tag starts the CLI release workflow, which builds the binaries and publishes them
+with `sweet github release`: it creates a draft with the changelog notes, uploads
+the binaries, and publishes the draft. A stable version becomes GitHub's Latest
+release when no higher stable `sweet@*` tag exists, so publishing an older version
+does not displace a newer one. If the workflow fails before publication, rerun it;
+it reuses the draft. A rerun leaves an already published release unchanged. To
+repair one, run `sweet github release <tag> --replace-published` with its assets,
+or edit the release on GitHub.
