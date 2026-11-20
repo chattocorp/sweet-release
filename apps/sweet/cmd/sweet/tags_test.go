@@ -80,7 +80,11 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 	}
 	bindir := t.TempDir()
 	write(filepath.Join(bindir, "sweet"), "#!/bin/sh\nexec \"$SWEET_TEST_BINARY\" -test.run='^TestTagPlannerProcess$' -- \"$@\"\n")
-	invoke := func(base, head string, fail bool) {
+	type entry struct {
+		Package, Version, Tag, Commit string
+		Prerelease, Latest            bool
+	}
+	invoke := func(base, head string, fail bool) ([]entry, map[string]*entry) {
 		t.Helper()
 		output := filepath.Join(t.TempDir(), "output")
 		cmd := exec.Command("bash", script, base, head)
@@ -96,21 +100,34 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var tags []struct{ Package, Version, Tag, Commit string }
-			if err := json.Unmarshal([]byte(strings.TrimPrefix(strings.TrimSpace(string(data)), "tags=")), &tags); err != nil {
+			lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+			var tags []entry
+			var packages map[string]*entry
+			if len(lines) != 2 {
+				t.Fatalf("wrong outputs: %s", data)
+			}
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(lines[0], "tags=")), &tags); err != nil {
 				t.Fatal(err)
 			}
-			if len(tags) != 8 {
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(lines[1], "packages=")), &packages); err != nil {
+				t.Fatal(err)
+			}
+			if len(tags) != 8 || len(packages) != 8 {
 				t.Fatalf("wrong tag list: %s", data)
 			}
 			for _, tag := range tags {
-				if tag.Package == "" || tag.Version == "" || !strings.HasSuffix(tag.Tag, tag.Version) || tag.Commit != head {
+				if tag.Package == "" || tag.Version == "" || !strings.HasSuffix(tag.Tag, tag.Version) || tag.Commit != head || *packages[tag.Package] != tag {
 					t.Fatalf("incomplete tag metadata: %s", data)
 				}
 			}
+			return tags, packages
 		}
+		return nil, nil
 	}
-	invoke(base, head, false)
+	tags, packages := invoke(base, head, false)
+	if !tags[0].Latest || tags[0].Prerelease || packages["pkg/api"].Tag != "api@0.1.0" || packages["pkg/missing"] != nil {
+		t.Fatalf("release metadata: %+v", tags)
+	}
 	for _, name := range []string{"v0.1.0", "api@0.1.0"} {
 		if got := git(remote, "rev-parse", "refs/tags/"+name+"^{commit}"); got != head {
 			t.Fatalf("wrong tag target: %s", got)
@@ -144,6 +161,21 @@ func TestTagWorkflowWithLocalRemote(t *testing.T) {
 	for _, name := range []string{"v0.2.0", "api@0.2.0"} {
 		if got := git(remote, "rev-parse", "refs/tags/"+name+"^{commit}"); got != next {
 			t.Fatalf("retry did not finish tag push: %s", got)
+		}
+	}
+	// A newer remote stable tag makes a rerun of an older range not latest.
+	git(remote, "tag", "v0.10.0", base)
+	beta := commit("0.3.0-beta.0")
+	tags, _ = invoke(next, beta, false)
+	for _, tag := range tags {
+		if !tag.Prerelease || tag.Latest {
+			t.Fatalf("prerelease metadata: %+v", tag)
+		}
+	}
+	tags, _ = invoke(head, next, false)
+	for _, tag := range tags {
+		if tag.Prerelease || tag.Latest != (tag.Package != ".") {
+			t.Fatalf("older stable metadata: %+v", tag)
 		}
 	}
 }
