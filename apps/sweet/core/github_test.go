@@ -49,6 +49,14 @@ func (f *fakeGitHub) create(tag, title, notes string, prerelease bool) error {
 	return nil
 }
 
+func (f *fakeGitHub) update(tag, title, notes string) error {
+	if err := f.record("update"); err != nil {
+		return err
+	}
+	f.releases[tag].title, f.releases[tag].notes = title, notes
+	return nil
+}
+
 func (f *fakeGitHub) upload(tag string, assets []string) error {
 	if err := f.record("upload"); err != nil {
 		return err
@@ -145,6 +153,44 @@ func TestGitHubReleaseDraft(t *testing.T) {
 	release := gh.releases["v1.0.0"]
 	if err != nil || result.Published || !release.draft || release.title != "Custom" || release.notes != "" {
 		t.Fatalf("draft: %+v, %v, %+v", result, err, release)
+	}
+}
+
+func TestGitHubReleaseRefreshesDrafts(t *testing.T) {
+	root, _, write, _ := tagFixture(t)
+	write(".sweet.yml", "name: App\nversion: 1.0.0\n")
+	write("CHANGELOG.md", "## 1.0.0\n\nOld\n")
+	gh := &fakeGitHub{releases: map[string]*fakeRelease{}, remote: []string{"v1.0.0"}}
+	if _, err := publishGitHubRelease(root, gh, GitHubReleaseOptions{Tag: "v1.0.0", Draft: true}); err != nil {
+		t.Fatal(err)
+	}
+	// A retried draft gets the current changelog notes and default title.
+	gh.releases["v1.0.0"].title = "Stale"
+	write("CHANGELOG.md", "## 1.0.0\n\nCurrent\n")
+	if _, err := publishGitHubRelease(root, gh, GitHubReleaseOptions{Tag: "v1.0.0", Draft: true}); err != nil {
+		t.Fatal(err)
+	}
+	if release := gh.releases["v1.0.0"]; release.title != "App 1.0.0" || release.notes != "\nCurrent\n" || !release.draft {
+		t.Fatalf("refreshed draft: %+v", release)
+	}
+	// Given notes and title replace a draft's, then the draft is published.
+	notes := "Given"
+	if _, err := publishGitHubRelease(root, gh, GitHubReleaseOptions{Tag: "v1.0.0", Title: "Custom", Notes: &notes}); err != nil {
+		t.Fatal(err)
+	}
+	if release := gh.releases["v1.0.0"]; release.title != "Custom" || release.notes != "Given" || release.draft {
+		t.Fatalf("given notes: %+v", release)
+	}
+	// Published notes are never refreshed, even with ReplacePublished.
+	write("CHANGELOG.md", "## 1.0.0\n\nNewer\n")
+	if _, err := publishGitHubRelease(root, gh, GitHubReleaseOptions{Tag: "v1.0.0", ReplacePublished: true}); err != nil {
+		t.Fatal(err)
+	}
+	if release := gh.releases["v1.0.0"]; release.notes != "Given" || release.title != "Custom" {
+		t.Fatalf("published notes changed: %+v", release)
+	}
+	if got := strings.Join(gh.calls, ","); got != "create,update,update,tags v,publish,tags v,publish" {
+		t.Fatalf("calls: %s", got)
 	}
 }
 
