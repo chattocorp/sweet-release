@@ -414,3 +414,49 @@ func TestReleasePRPrerelease(t *testing.T) {
 	prepare("chore: release api 1.3.0", "## api 1.3.0", "- Beta feature.", "- Beta fix.")
 	prepare("")
 }
+
+// Results arrive flat for one artifact and in subdirectories for several.
+func TestCollectReleaseResults(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the workflow runs in Bash on Linux")
+	}
+	for _, tool := range []string{"bash", "jq"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("workflow test requires %s", tool)
+		}
+	}
+	_, source, _, _ := runtime.Caller(0)
+	script := filepath.Join(filepath.Dir(source), "../../../../.github/scripts/collect-release-results.sh")
+	write := func(file, data string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	single := t.TempDir()
+	write(filepath.Join(single, "desired.json"), `[{"branch":"a"}]`)
+	multiple := t.TempDir()
+	write(filepath.Join(multiple, "result-0", "desired.json"), `[{"branch":"a"}]`)
+	write(filepath.Join(multiple, "result-1", "desired.json"), `[]`)
+	write(filepath.Join(multiple, "result-2", "desired.json"), `[{"branch":"c"}]`)
+	for _, tc := range []struct {
+		name, dir, expected, want string
+	}{
+		{"single artifact", single, "1", `[{"branch":"a"}]`},
+		{"several artifacts", multiple, "3", `[{"branch":"a"},{"branch":"c"}]`},
+		{"no results", t.TempDir(), "1", ""},
+		{"missing directory", filepath.Join(single, "missing"), "1", ""},
+		{"missing result", multiple, "4", ""},
+		{"zero expected", t.TempDir(), "0", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := exec.Command("bash", script, tc.dir, tc.expected).Output()
+			if (err != nil) != (tc.want == "") || strings.TrimSpace(string(out)) != tc.want {
+				t.Fatalf("collect: %v: %q", err, out)
+			}
+		})
+	}
+}
