@@ -15,8 +15,8 @@ func newGitHubCommand() *cobra.Command {
 	release := &cobra.Command{
 		Use:   "release <tag> [assets...]",
 		Short: "Create, upload to, and publish a GitHub release for a tag",
-		Long: "Create a draft GitHub release for an existing Sweet tag, or reuse it, with notes from the\n" +
-			"package changelog. Upload assets, replacing files with the same name, then publish it.\n" +
+		Long: "Create a draft GitHub release for an existing Sweet tag, or reuse and refresh a draft, with\n" +
+			"notes from the package changelog. Upload assets, replacing files with the same name, then publish it.\n" +
 			"Prerelease versions are marked as prereleases. The release becomes Latest only for the\n" +
 			"highest stable version of the root package, or of the only package in the repository.\n" +
 			"Reruns are safe. A published release is left unchanged unless --replace-published is given.\n" +
@@ -61,10 +61,10 @@ func newGitHubCommand() *cobra.Command {
 		},
 	}
 	release.Flags().BoolVar(&draft, "draft", false, "Create and upload only; leave a new release unpublished")
-	release.Flags().StringVar(&title, "title", "", "Title for a new release (default: package name and version, or the tag)")
-	release.Flags().StringVar(&notesFile, "notes-file", "", "Read notes for a new release from a file instead of the changelog")
+	release.Flags().StringVar(&title, "title", "", "Title for a new or draft release (default: package name and version, or the tag)")
+	release.Flags().StringVar(&notesFile, "notes-file", "", "Read notes for a new or draft release from a file instead of the changelog")
 	release.Flags().BoolVar(&latest, "latest", false, "Mark as Latest (--latest) or never (--latest=false) instead of choosing automatically")
-	release.Flags().BoolVar(&replacePublished, "replace-published", false, "Also upload to an already published release, replacing same-name assets, and reapply prerelease and Latest")
+	release.Flags().BoolVar(&replacePublished, "replace-published", false, "Also upload to an already published release, replacing same-name assets, and reapply prerelease and Latest (title and notes stay)")
 	cmd.AddCommand(release)
 	return cmd
 }

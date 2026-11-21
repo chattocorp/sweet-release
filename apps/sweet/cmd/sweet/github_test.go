@@ -19,7 +19,10 @@ case "$1 $2" in
 "release create")
   cat > "$GH_NOTES"; echo true > "$GH_STATE" ;;
 "release edit")
-  echo false > "$GH_STATE" ;;
+  case "$*" in
+  *--draft=false*) echo false > "$GH_STATE" ;;
+  *) cat > "$GH_NOTES" ;;
+  esac ;;
 "api "*)
   printf 'refs/tags/v0.9.0\nrefs/tags/v1.0.0\n' ;;
 esac
@@ -104,8 +107,12 @@ func TestGitHubReleaseCommand(t *testing.T) {
 	if out := invoke("v1.0.0", "--draft", "c.txt"); out != "Reused draft release v1.0.0\nUploaded 1 assets\n" {
 		t.Fatalf("draft: %q", out)
 	}
-	if got := calls(); strings.Contains(got, "release edit") {
-		t.Fatalf("draft published: %s", got)
+	// The reused draft gets fresh title and notes, but is not published.
+	if got := calls(); strings.Contains(got, "--draft=false") || !strings.Contains(got, "release edit v1.0.0 --title App 1.0.0 --notes-file -\n") {
+		t.Fatalf("draft refresh: %s", got)
+	}
+	if data, _ := os.ReadFile(notes); string(data) != "\nNew\n" {
+		t.Fatalf("refreshed notes: %q", data)
 	}
 	invoke("v1.0.0", "--latest=false")
 	if got := calls(); strings.Contains(got, "api ") || !strings.Contains(got, "--latest=false\n") {

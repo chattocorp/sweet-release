@@ -304,8 +304,13 @@ match the current manifest. Ambiguous or unknown tags fail before any request.
    `gh release create --verify-tag --draft --latest=false`, the title, and notes
    from `CHANGELOG.md` for that version (as `sweet changelog --version`). A
    missing changelog entry fails before creation. A draft is reused, so a rerun
-   never creates a second release. A published release is left unchanged and
-   the command stops here, unless `--replace-published` is given.
+   never creates a second release, and gets the same title and notes as a new
+   release through `gh release edit --title --notes-file`. Drafts are not public,
+   so a retried draft always carries the current changelog notes. A draft rerun
+   therefore also needs a changelog entry for the version; if the draft was
+   created with `--notes-file`, pass it again. A published
+   release is left unchanged and the command stops here, unless
+   `--replace-published` is given.
 2. `gh release upload --clobber` uploads any assets, replacing same-name files.
 3. Without `--draft`, `gh release edit --draft=false --prerelease=<p> --latest=<l>`
    publishes. With `--replace-published`, this also runs for an already
@@ -313,7 +318,9 @@ match the current manifest. Ambiguous or unknown tags fail before any request.
 
 Published releases are skipped by default because one `gh release edit` sets
 draft, prerelease, and Latest together: a published release already has its
-state, and its assets may be live downloads.
+state, and its assets may be live downloads. Even with `--replace-published`,
+the title and notes of a published release are never replaced: they are public
+and may have been edited by hand. Change them on GitHub or with `gh release edit`.
 
 `prerelease` is true when the version has a prerelease suffix. Without `--latest`,
 Latest is true only for a stable version of the main package (the root package,
@@ -323,8 +330,8 @@ GitHub's `--latest=false` never demotes the current Latest release.
 `--latest=true` for a prerelease is an error.
 
 Flags: `--draft` (create and upload only), `--title` (default: `<name> <version>`
-with a manifest name, otherwise the tag), `--notes-file` (notes for a new release
-instead of the changelog), `--latest[=false]`, and `--replace-published`.
+with a manifest name, otherwise the tag), `--notes-file` (notes for a new
+or draft release instead of the changelog), `--latest[=false]`, and `--replace-published`.
 Concurrent runs for the same missing release can create duplicate drafts;
 serialize them per tag. `gh` deletes each same-name asset before uploading its
 replacement, so with `--replace-published` a failed upload leaves that asset

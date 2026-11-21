@@ -45,6 +45,8 @@ type githubReleases interface {
 	// state returns missing, draft, or published.
 	state(tag string) (string, error)
 	create(tag, title, notes string, prerelease bool) error
+	// update replaces a release's title and notes.
+	update(tag, title, notes string) error
 	upload(tag string, assets []string) error
 	publish(tag string, prerelease, latest bool) error
 	// tags lists remote tag names that start with prefix.
@@ -53,7 +55,7 @@ type githubReleases interface {
 
 // PublishGitHubRelease creates or reuses a draft GitHub release for a Sweet tag,
 // uploads assets with replacement, and publishes it unless opts.Draft is set.
-// Published releases are left unchanged unless opts.ReplacePublished is set.
+// A reused draft gets the same title and notes as a new release. Published releases are left unchanged unless opts.ReplacePublished is set.
 // It uses the gh CLI with its usual authentication (GH_TOKEN) and repository
 // detection (GH_REPO or the Git remote).
 func PublishGitHubRelease(root string, opts GitHubReleaseOptions) (GitHubReleaseResult, error) {
@@ -81,7 +83,9 @@ func publishGitHubRelease(root string, gh githubReleases, opts GitHubReleaseOpti
 		// published release needs no repair. Its assets may be live downloads.
 		return result, nil
 	}
-	if result.State == "missing" {
+	// Drafts are not public, so a rerun refreshes them like a new release.
+	// Published notes may have been edited by hand and are never replaced.
+	if result.State == "missing" || result.State == "draft" {
 		var notes string
 		if opts.Notes != nil {
 			notes = *opts.Notes
@@ -97,7 +101,12 @@ func publishGitHubRelease(root string, gh githubReleases, opts GitHubReleaseOpti
 				title = pkg.Name + " " + version
 			}
 		}
-		if err := gh.create(opts.Tag, title, notes, result.Prerelease); err != nil {
+		if result.State == "missing" {
+			err = gh.create(opts.Tag, title, notes, result.Prerelease)
+		} else {
+			err = gh.update(opts.Tag, title, notes)
+		}
+		if err != nil {
 			return result, err
 		}
 	}
@@ -208,6 +217,11 @@ func (g ghCLI) create(tag, title, notes string, prerelease bool) error {
 		args = append(args, "--prerelease")
 	}
 	_, err := g.run(notes, args...)
+	return err
+}
+
+func (g ghCLI) update(tag, title, notes string) error {
+	_, err := g.run(notes, "release", "edit", tag, "--title", title, "--notes-file", "-")
 	return err
 }
 

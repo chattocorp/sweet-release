@@ -261,8 +261,9 @@ jobs:
 The command:
 
 1. Creates a draft release for the existing tag, with notes from the package's
-   changelog entry for that version, or reuses an existing draft. A published
-   release is left unchanged (see below).
+   changelog entry for that version, or reuses an existing draft and refreshes
+   its title and notes the same way. A published release is left unchanged
+   (see below).
 2. Uploads the assets, replacing files with the same name.
 3. Publishes the release, marks prerelease versions as prereleases, and sets
    whether it is the repository's Latest release.
@@ -272,16 +273,18 @@ when it is the highest stable version of the root package, or of the only
 package in the repository. Other packages' releases never become Latest
 automatically. Pass `--latest` or `--latest=false` to decide yourself.
 
-Reruns are safe. They reuse a draft and replace its assets. An already published
+Reruns are safe. They reuse a draft, refresh its title and notes, and replace
+its assets. An already published
 release is left unchanged: no uploads and no edits, because publication already
 set its prerelease and Latest state in one step. Pass `--replace-published` to
-upload to a published release anyway and reapply that state. `gh` deletes each
+upload to a published release anyway and reapply that state; its title and
+notes stay as they are. `gh` deletes each
 old asset before uploading its replacement, so a failed upload leaves that file
 missing from the live release until a rerun succeeds. Serialize jobs for the same tag, as above, so two runs do not create
 two drafts. Use `--draft` to create and upload without publishing, then run the
 command again without it to publish. `--title` and `--notes-file` replace the
 default title (the package `name` and version, or the tag) and notes for a new
-release. The command needs the [`gh` CLI](https://cli.github.com/), which
+or draft release. The command needs the [`gh` CLI](https://cli.github.com/), which
 GitHub-hosted runners include, and a token with Contents write access in
 `GH_TOKEN`.
 
