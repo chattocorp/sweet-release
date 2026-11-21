@@ -291,3 +291,41 @@ Existing notes are never overwritten. The command creates `.sweet/` if the
 package does not yet have it. Notes require a `type`; the optional `breaking`
 field defaults to false. Other frontmatter fields are rejected. The Markdown
 body is preserved when notes are read for the status inventory.
+
+## Publish GitHub releases
+
+`sweet github release <tag> [assets...]` publishes a GitHub Release for an
+existing Sweet tag through the `gh` CLI. `gh` reads `GH_TOKEN` and finds the
+repository from `GH_REPO` or the Git remote. The tag selects the package whose
+tag prefix it starts with, followed by a semantic version; the version need not
+match the current manifest. Ambiguous or unknown tags fail before any request.
+
+1. `gh release view` finds the release state. A missing release is created with
+   `gh release create --verify-tag --draft --latest=false`, the title, and notes
+   from `CHANGELOG.md` for that version (as `sweet changelog --version`). A
+   missing changelog entry fails before creation. A draft is reused, so a rerun
+   never creates a second release. A published release is left unchanged and
+   the command stops here, unless `--replace-published` is given.
+2. `gh release upload --clobber` uploads any assets, replacing same-name files.
+3. Without `--draft`, `gh release edit --draft=false --prerelease=<p> --latest=<l>`
+   publishes. With `--replace-published`, this also runs for an already
+   published release and reapplies the computed state.
+
+Published releases are skipped by default because one `gh release edit` sets
+draft, prerelease, and Latest together: a published release already has its
+state, and its assets may be live downloads.
+
+`prerelease` is true when the version has a prerelease suffix. Without `--latest`,
+Latest is true only for a stable version of the main package (the root package,
+or the only package) that no stable remote tag with the same prefix exceeds.
+Sweet lists remote tags through the GitHub API, so the checkout needs no tags.
+GitHub's `--latest=false` never demotes the current Latest release.
+`--latest=true` for a prerelease is an error.
+
+Flags: `--draft` (create and upload only), `--title` (default: `<name> <version>`
+with a manifest name, otherwise the tag), `--notes-file` (notes for a new release
+instead of the changelog), `--latest[=false]`, and `--replace-published`.
+Concurrent runs for the same missing release can create duplicate drafts;
+serialize them per tag. `gh` deletes each same-name asset before uploading its
+replacement, so with `--replace-published` a failed upload leaves that asset
+missing from the live release until the next successful rerun.

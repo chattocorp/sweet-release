@@ -5,7 +5,8 @@ succeed. The shared workflow builds Sweet from its own revision by default,
 checks out the exact pushed SHA, fetches tags, and invokes
 `.github/scripts/tag-releases.sh` with the push's before and after SHAs.
 It creates and pushes package tags and returns their metadata as JSON.
-Separate workflows triggered by those tags own builds and publication.
+Publication belongs to the caller: jobs in the same run that read the outputs,
+or separate workflows triggered by the tags.
 Pull requests, other branches,
 and manual CI dispatches do not create tags. Each main push has its own concurrency
 group so a later push cannot cancel a range before tagging. Separate runs can push
@@ -56,9 +57,17 @@ the operation. Tags are never moved or overwritten. If a remote rejects a tag,
 earlier pushes remain. Rerunning the original CI run safely retries
 the original range after a failure; later pushes do not automatically backfill it.
 
-The job requires a personal or GitHub App token with Contents write access,
-passed as `release-token`. This repository uses `RELEASE_PR_TOKEN`.
-Tags pushed with `GITHUB_TOKEN` do not start other push-triggered workflows.
+The `tags` output lists `package` (the path), `version`, `tag`, `commit`,
+`prerelease`, and `highest` for each planned tag. The script computes
+`prerelease` from the version's suffix and `highest` as "stable and not exceeded
+by any stable local tag with the same prefix" after fetching remote tags; it
+does not depend on newer CLI output. The `packages` output maps each package path
+to its last entry in `tags`.
+
+The optional `release-token` needs Contents write access and defaults to
+`GITHUB_TOKEN`. Tags pushed with `GITHUB_TOKEN` do not start other
+push-triggered workflows. This repository passes `RELEASE_PR_TOKEN` because
+`release-cli.yml` runs on tag pushes.
 See [CLI publishing](publishing.md) and
 [GitHub's workflow trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
 The local tests use temporary repositories and a bare remote to verify annotated

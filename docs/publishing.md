@@ -10,17 +10,20 @@ by the workflow, which also supports prefixed release tags. Its release settings
 do not publish anything. The workflow checks the Linux binary version and
 SHA-256 checksums before publication.
 
-Sweet extracts the release notes from the versioned changelog. The workflow
-passes the notes, archives, and checksums to `gh release create --verify-tag`.
-With assets, this command creates a draft, uploads the files, and then publishes.
+The workflow publishes the archives and checksums with
+`sweet github release` (see the [CLI reference](cli-reference.md#publish-github-releases)),
+run from the tagged source. It creates a draft with notes from the versioned
+changelog, or reuses an existing one, uploads the files with replacement, and
+then publishes.
 
 Jobs for the same tag are serialized. A build failure stops publication; an
 upload failure leaves an unpublished draft. Rerun the failed tag workflow to
-retry. It rebuilds the assets, skips publication for an already published release,
-and recreates a leftover draft before uploading again. The tag is kept.
+retry. It rebuilds the assets; `sweet github release` leaves an already published
+release unchanged and otherwise reuses the draft and replaces its assets. The tag is kept.
 
-Versions with prerelease suffixes are marked as prereleases. GitHub selects
-Latest automatically. There is no separate promotion job.
+Versions with prerelease suffixes are marked as prereleases. The CLI is the
+repository's only package, so its highest stable version becomes Latest.
+There is no separate promotion job.
 
 ## Local validation
 

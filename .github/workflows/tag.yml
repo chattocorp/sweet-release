@@ -9,12 +9,15 @@ on:
         default: source
     secrets:
       release-token:
-        description: Token with contents write access. Tags pushed with GITHUB_TOKEN do not trigger tag workflows.
-        required: true
+        description: Token with contents write access; defaults to GITHUB_TOKEN. Tags pushed with GITHUB_TOKEN do not trigger tag workflows.
+        required: false
     outputs:
       tags:
-        description: JSON array of package, version, tag, and commit, including matching existing tags on retries.
+        description: JSON array of package, version, tag, commit, prerelease, and highest, including matching existing tags on retries.
         value: ${{ jobs.tag.outputs.tags }}
+      packages:
+        description: JSON object from package path to its newest entry in tags.
+        value: ${{ jobs.tag.outputs.packages }}
 
 jobs:
   tag:
@@ -22,6 +25,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       tags: ${{ steps.tags.outputs.tags }}
+      packages: ${{ steps.tags.outputs.packages }}
     steps:
       - name: Require a branch push
         if: github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/')
@@ -32,7 +36,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-          token: ${{ secrets.release-token }}
+          token: ${{ secrets.release-token || github.token }}
       - id: tooling
         uses: $/.github/actions/bootstrap
         with:

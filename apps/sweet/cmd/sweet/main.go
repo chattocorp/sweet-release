@@ -55,6 +55,7 @@ func newRootCommand() *cobra.Command {
 	cmd.AddCommand(newBumpCommand())
 	cmd.AddCommand(newChangelogCommand())
 	cmd.AddCommand(newGitCommand())
+	cmd.AddCommand(newGitHubCommand())
 	cmd.AddCommand(newChangeCommand())
 	cmd.AddCommand(&cobra.Command{
 		Use: "doctor", Short: "Validate packages, pending release notes, and release preparation", Args: cobra.NoArgs,

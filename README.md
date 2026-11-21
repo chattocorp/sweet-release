@@ -75,9 +75,10 @@ Set the push filter and Bump's `base-branch` to the repository's release branch.
 If tags already exist, land the initial manifests first. Enable Tag in a later
 push so it starts with future version changes.
 
-Bump and Tag take a `release-token` secret. Have the maintainer set
+Bump takes a `release-token` secret. Have the maintainer set
 `RELEASE_PR_TOKEN` to a token with Contents and Pull requests write access
-and pass it to both workflows. Keep the repository's publishing jobs.
+and pass it to Bump. Tag uses `GITHUB_TOKEN` by default. Keep the repository's
+publishing jobs; they can run after Tag in the same workflow.
 
 ### Check the setup
 
