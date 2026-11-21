@@ -168,11 +168,8 @@ jobs:
         run: |
           export RELEASE_PRS='[]'
           if [[ "$RELEASE_JOBS" != '[]' ]]; then
-            # Missing results must stop cleanup, not be treated as no releases.
-            expected=$(jq 'length' <<< "$RELEASE_JOBS")
-            files=("$RUNNER_TEMP"/release-results/*/desired.json)
-            [[ ${#files[@]} -eq "$expected" ]]
-            RELEASE_PRS=$(jq -sc 'add' "${files[@]}")
+            RELEASE_PRS=$(bash "$SCRIPTS/collect-release-results.sh" \
+              "$RUNNER_TEMP/release-results" "$(jq 'length' <<< "$RELEASE_JOBS")")
           fi
           encoded=$(jq -rn --arg branch "$BASE_BRANCH" '$branch | @uri')
           current=$(gh api "repos/$GITHUB_REPOSITORY/commits/$encoded" --jq .sha)
