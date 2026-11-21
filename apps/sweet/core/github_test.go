@@ -194,6 +194,33 @@ func TestGitHubReleaseRefreshesDrafts(t *testing.T) {
 	}
 }
 
+func TestGitHubReleaseDraftRefreshFailures(t *testing.T) {
+	root, _, write, _ := tagFixture(t)
+	write(".sweet.yml", "version: 1.0.0\n")
+	write("CHANGELOG.md", "## 0.9.0\n")
+	notes := "Given"
+	gh := &fakeGitHub{releases: map[string]*fakeRelease{}, failCalls: map[string]bool{"update": true}}
+	if _, err := publishGitHubRelease(root, gh, GitHubReleaseOptions{Tag: "v1.0.0", Notes: &notes, Draft: true}); err != nil {
+		t.Fatal(err)
+	}
+	opts := GitHubReleaseOptions{Tag: "v1.0.0", Notes: &notes, Assets: []string{"a"}}
+	// A failed refresh stops before uploads or publication.
+	if _, err := publishGitHubRelease(root, gh, opts); err == nil {
+		t.Fatal("refresh failure was ignored")
+	}
+	// Without --notes-file, a draft rerun needs a changelog entry.
+	opts.Notes = nil
+	if _, err := publishGitHubRelease(root, gh, opts); err == nil || !strings.Contains(err.Error(), `no release "1.0.0"`) {
+		t.Fatalf("missing notes: %v", err)
+	}
+	if release := gh.releases["v1.0.0"]; !release.draft || len(release.assets) != 0 || release.notes != "Given" {
+		t.Fatalf("failed refresh changed the draft: %+v", release)
+	}
+	if got := strings.Join(gh.calls, ","); got != "create,update" {
+		t.Fatalf("calls: %s", got)
+	}
+}
+
 func TestGitHubReleaseLatestAndPrerelease(t *testing.T) {
 	yes, no := true, false
 	for _, tc := range []struct {

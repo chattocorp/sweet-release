@@ -306,7 +306,9 @@ match the current manifest. Ambiguous or unknown tags fail before any request.
    missing changelog entry fails before creation. A draft is reused, so a rerun
    never creates a second release, and gets the same title and notes as a new
    release through `gh release edit --title --notes-file`. Drafts are not public,
-   so a retried draft always carries the current changelog notes. A published
+   so a retried draft always carries the current changelog notes. A draft rerun
+   therefore also needs a changelog entry for the version; if the draft was
+   created with `--notes-file`, pass it again. A published
    release is left unchanged and the command stops here, unless
    `--replace-published` is given.
 2. `gh release upload --clobber` uploads any assets, replacing same-name files.
