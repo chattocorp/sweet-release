@@ -3,8 +3,8 @@ package core
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"math/big"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -45,18 +45,30 @@ func RepositoryStatus(root string) ([]PackageStatus, error) {
 	return repositoryStatus(root, RepositoryConfig{})
 }
 
+// TreeStatus inventories packages as committed in a Git tree-ish: a commit,
+// tag, or tree object. It reads blobs only, never the working tree or index.
+func TreeStatus(rev string) ([]PackageStatus, error) {
+	files, err := treeSnapshot(rev)
+	if err != nil {
+		return nil, err
+	}
+	return snapshotStatus(files, RepositoryConfig{})
+}
+
 // repositoryStatus reuses loaded settings, or loads them after package discovery.
 func repositoryStatus(root string, config RepositoryConfig) ([]PackageStatus, error) {
-	paths, err := repositoryFiles(root)
+	files, err := workingSnapshot(root)
 	if err != nil {
 		return nil, err
 	}
-	packages, manifestProblems, err := packagesFromFiles(root, paths)
-	if err != nil {
-		return nil, err
-	}
+	return snapshotStatus(files, config)
+}
+
+func snapshotStatus(files snapshot, config RepositoryConfig) ([]PackageStatus, error) {
+	packages, manifestProblems := packagesFromFiles(files)
 	if config.ChangeTypes == nil {
-		config, err = LoadRepositoryConfig(root)
+		var err error
+		config, err = snapshotConfig(files)
 		if err != nil {
 			return nil, err
 		}
@@ -67,7 +79,7 @@ func repositoryStatus(root string, config RepositoryConfig) ([]PackageStatus, er
 		policies[typ.Name] = typ.Bump
 	}
 	notes := make(map[string][]string)
-	for _, path := range paths {
+	for _, path := range files.paths {
 		dir := filepath.Dir(path)
 		if filepath.Base(dir) == ".sweet" && filepath.Ext(path) == ".md" {
 			pkg := filepath.ToSlash(filepath.Dir(dir))
@@ -81,7 +93,7 @@ func repositoryStatus(root string, config RepositoryConfig) ([]PackageStatus, er
 	}
 	statuses := make([]PackageStatus, 0, len(packages))
 	for _, pkg := range packages {
-		changes, problems := changesFromFiles(root, notes[pkg.Path])
+		changes, problems := changesFromFiles(files.fsys, notes[pkg.Path])
 		status := PackageStatus{Package: pkg, Changes: changes, Bump: "none", Problems: problems}
 		status.Problems = append(status.Problems, packageProblems[pkg.Path]...)
 		for _, change := range changes {
@@ -104,6 +116,7 @@ func repositoryStatus(root string, config RepositoryConfig) ([]PackageStatus, er
 			}
 		}
 		if pkg.Version != "" {
+			var err error
 			status.NextVersion, err = nextVersion(pkg.Version, status.Bump, pkg.Prerelease)
 			if err != nil {
 				status.Problems = append(status.Problems, Problem{Path: filepath.ToSlash(filepath.Join(pkg.Path, ".sweet.yml")), Message: err.Error()})
@@ -118,7 +131,7 @@ func repositoryStatus(root string, config RepositoryConfig) ([]PackageStatus, er
 	return statuses, nil
 }
 
-func changesFromFiles(root string, paths []string) ([]Change, []Problem) {
+func changesFromFiles(fsys fs.FS, paths []string) ([]Change, []Problem) {
 	var changes []Change
 	var problems []Problem
 	seen := map[string]bool{}
@@ -128,8 +141,8 @@ func changesFromFiles(root string, paths []string) ([]Change, []Problem) {
 		}
 		seen[path] = true
 		name := path
-		data, err := os.ReadFile(filepath.Join(root, path))
-		if os.IsNotExist(err) {
+		data, ok, err := readOptional(fsys, path)
+		if err == nil && !ok {
 			continue
 		}
 		if err != nil {

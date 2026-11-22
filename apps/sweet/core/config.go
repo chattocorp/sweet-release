@@ -73,13 +73,25 @@ func decodeYAMLDocument(data []byte, out any, strict bool, what string) error {
 // LoadRepositoryConfig reads and validates the repository's shared settings once.
 // Missing settings use built-in types.
 func LoadRepositoryConfig(dir string) (RepositoryConfig, error) {
-	data, path, err := loadRepositoryConfig(dir)
+	root, err := gitRoot(dir)
 	if err != nil {
-		return RepositoryConfig{}, err
+		root = dir
+	}
+	return snapshotConfig(snapshot{fsys: os.DirFS(root), configPath: filepath.Join(root, ".sweet.config.yml")})
+}
+
+// snapshotConfig reads repository settings from a snapshot's root.
+func snapshotConfig(files snapshot) (RepositoryConfig, error) {
+	data, ok, err := readOptional(files.fsys, ".sweet.config.yml")
+	if err != nil {
+		return RepositoryConfig{}, fmt.Errorf("read %s: %w", files.configPath, err)
+	}
+	if !ok {
+		data = []byte("{}")
 	}
 	config, err := parseRepositoryConfig(data)
 	if err != nil {
-		return RepositoryConfig{}, fmt.Errorf("%s: %w", path, err)
+		return RepositoryConfig{}, fmt.Errorf("%s: %w", files.configPath, err)
 	}
 	return config, nil
 }
@@ -109,21 +121,6 @@ func CheckChangeType(types []ChangeType, name string) error {
 		names[i] = typ.Name
 	}
 	return fmt.Errorf("unknown change type %q; available types: %s", name, strings.Join(names, ", "))
-}
-
-func loadRepositoryConfig(dir string) ([]byte, string, error) {
-	root, err := gitRoot(dir)
-	if err != nil {
-		root = dir
-	}
-	path := filepath.Join(root, ".sweet.config.yml")
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		data = []byte("{}")
-	} else if err != nil {
-		return nil, path, fmt.Errorf("read %s: %w", path, err)
-	}
-	return data, path, nil
 }
 
 var changeTypeName = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)

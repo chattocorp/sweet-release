@@ -18,6 +18,21 @@ do not change the exit status: `status` remains informational, including with
 Command failures, such as invalid repository configuration or tag collisions,
 can still return a non-zero exit status.
 
+### Read the plan from a commit
+
+```sh
+sweet status --json --rev main
+sweet status --json --rev "$(git merge-tree --write-tree main feature)"
+```
+
+`--rev` reads the release plan from a Git commit, tag, or tree object instead of
+the working directory, with the same output as `status` in a clean checkout of
+it. Sweet reads only committed blobs: working tree changes, untracked files, and
+the index are ignored, and no filters or hooks run. It works from any directory
+in the repository, in bare repositories, and with `GIT_DIR` set. Use it to
+compare the plan of a pull request's target with that of the merge result
+without checking either out.
+
 ## Validate before merging
 
 ```sh

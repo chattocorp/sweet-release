@@ -33,6 +33,14 @@ tags, so it can read manifests even when the tagged CLI predates this feature.
 optional `name`, `version`, `changes`, `bump`, `nextVersion`, and `problems`.
 The default status table continues to show paths.
 
+`sweet status --rev <tree-ish>` reads the plan from a Git commit, tag, or tree
+object (resolved with `git rev-parse <tree-ish>^{tree}`) instead of the working
+directory. Files come from `git ls-tree -r --full-tree` and `git cat-file blob`
+(no filters, hooks, index, or work tree; symlinks resolve within the tree).
+Output equals `status` in a clean checkout of that tree. It works with and
+without `--json`, from any directory, and in bare repositories or with `GIT_DIR`.
+An unresolvable revision fails the command.
+
 `sweet status` shows a repository-wide inventory from any directory:
 
 ```text
