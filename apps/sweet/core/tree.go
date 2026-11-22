@@ -46,9 +46,6 @@ func workingSnapshot(root string) (snapshot, error) {
 	return snapshot{files: os.DirFS(root).(fs.ReadFileFS), paths: paths, configPath: filepath.Join(root, ".sweet.config.yml")}, nil
 }
 
-// maxTreeBlob bounds the size of a file read from a tree.
-const maxTreeBlob = 1 << 20
-
 // treeSnapshot reads files from a Git tree-ish (commit, tag, or tree object)
 // in the repository of the current directory, or GIT_DIR. It reads blobs only:
 // no working tree, index, filters, hooks, or lazy fetches. All plan files are
@@ -66,46 +63,33 @@ func treeSnapshot(rev string) (snapshot, error) {
 	if err != nil {
 		return snapshot{}, fmt.Errorf("list files in %s: %w", rev, err)
 	}
-	t := &gitTree{entries: map[string]treeEntry{}, dirs: map[string]bool{"": true}}
 	var paths []string
+	submodules := map[string]bool{}
 	for _, record := range strings.Split(string(listing), "\x00") {
 		meta, name, ok := strings.Cut(record, "\t")
 		fields := strings.Fields(meta)
 		if !ok || len(fields) != 4 {
 			continue
 		}
-		entry := treeEntry{mode: fields[0], oid: fields[2]}
 		if fields[1] == "commit" {
-			t.dirs[name] = true // A submodule checks out as an empty directory.
-		} else if entry.size, err = strconv.ParseInt(fields[3], 10, 64); err != nil {
-			return snapshot{}, fmt.Errorf("list files in %s: object %s for %s is missing", rev, entry.oid, name)
-		} else {
-			t.entries[name] = entry
-		}
-		for dir := path.Dir(name); dir != "."; dir = path.Dir(dir) {
-			t.dirs[dir] = true
+			submodules[name] = true
+		} else if _, err := strconv.ParseInt(fields[3], 10, 64); err != nil {
+			return snapshot{}, fmt.Errorf("list files in %s: object %s for %s is missing", rev, fields[2], name)
 		}
 		paths = append(paths, name)
 	}
 	sort.Strings(paths)
 
-	if err := t.start(); err != nil {
-		return snapshot{}, err
-	}
-	defer t.stop()
-	files := treeFiles{}
+	var names []string
+	seen := map[string]bool{}
 	for _, name := range append([]string{".sweet.config.yml"}, paths...) {
-		if _, done := files[name]; done || name != ".sweet.config.yml" && !isManifest(name) && !isNote(name) {
-			continue
+		if !seen[name] && (name == ".sweet.config.yml" || isManifest(name) || isNote(name)) {
+			seen[name] = true
+			names = append(names, name)
 		}
-		data, err := t.resolve(name)
-		var gitErr *treeGitError
-		if errors.As(err, &gitErr) {
-			return snapshot{}, fmt.Errorf("read %s from %s: %w", name, rev, err)
-		}
-		files[name] = treeFile{data, err}
 	}
-	if err := t.stop(); err != nil {
+	files, err := readTree(strings.TrimSpace(string(tree)), names, submodules)
+	if err != nil {
 		return snapshot{}, fmt.Errorf("read files from %s: %w", rev, err)
 	}
 	return snapshot{files: files, paths: paths, configPath: rev + ":.sweet.config.yml"}, nil
@@ -127,140 +111,101 @@ func (f treeFiles) ReadFile(name string) ([]byte, error) {
 	return file.data, file.err
 }
 
-type treeEntry struct {
-	mode, oid string
-	size      int64
-}
-
-// gitTree resolves paths in a listed tree, reading blobs from a batch process.
-type gitTree struct {
-	entries map[string]treeEntry
-	dirs    map[string]bool
-	cmd     *exec.Cmd
-	stderr  bytes.Buffer
-	in      io.WriteCloser
-	out     *bufio.Reader
-}
-
-// treeGitError marks Git failures, as opposed to unreadable files.
-type treeGitError struct{ err error }
-
-func (e *treeGitError) Error() string { return e.err.Error() }
-func (e *treeGitError) Unwrap() error { return e.err }
-
-func (t *gitTree) start() error {
-	t.cmd = treeCommand("cat-file", "--batch")
-	t.cmd.Stderr = &t.stderr
-	in, err := t.cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-	out, err := t.cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	if err := t.cmd.Start(); err != nil {
-		return fmt.Errorf("start git cat-file: %w", err)
-	}
-	t.in, t.out = in, bufio.NewReader(out)
-	return nil
-}
-
-// stop ends the batch process once; later calls return nil.
-func (t *gitTree) stop() error {
-	if t.cmd == nil {
-		return nil
-	}
-	t.in.Close()
-	err := t.cmd.Wait()
-	t.cmd = nil
-	return gitFailure(err, t.stderr.Bytes())
-}
-
-func (t *gitTree) blob(entry treeEntry) ([]byte, error) {
-	fail := func(err error) ([]byte, error) {
-		if stopErr := t.stop(); stopErr != nil {
-			err = stopErr
+// readTree reads files from a tree with one `git cat-file --batch
+// --follow-symlinks` process, which resolves symbolic links within the tree
+// like a checkout would. Links that leave the tree do not exist.
+func readTree(tree string, names []string, submodules map[string]bool) (treeFiles, error) {
+	files := treeFiles{}
+	var requests []string
+	for _, name := range names {
+		if strings.Contains(name, "\n") { // Batch requests are lines.
+			files[name] = treeFile{err: &fs.PathError{Op: "open", Path: name, Err: errors.New("unsupported file name")}}
+		} else {
+			requests = append(requests, name)
 		}
-		return nil, &treeGitError{err}
 	}
-	if _, err := fmt.Fprintln(t.in, entry.oid); err != nil {
-		return fail(err)
-	}
-	header, err := t.out.ReadString('\n')
+	var stderr bytes.Buffer
+	cmd := treeCommand("cat-file", "--batch", "--follow-symlinks")
+	cmd.Stderr = &stderr
+	in, err := cmd.StdinPipe()
 	if err != nil {
-		return fail(err)
+		return nil, err
 	}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start git cat-file: %w", err)
+	}
+	go func() {
+		defer in.Close()
+		for _, name := range requests {
+			if _, err := fmt.Fprintf(in, "%s:%s\n", tree, name); err != nil {
+				return
+			}
+		}
+	}()
+	reader := bufio.NewReader(out)
+	for _, name := range requests {
+		var file treeFile
+		if file, err = readTreeFile(reader, name, submodules[name]); err != nil {
+			cmd.Process.Kill()
+			break
+		}
+		files[name] = file
+	}
+	if waitErr := cmd.Wait(); err == nil {
+		err = waitErr
+	}
+	if err != nil {
+		return nil, gitFailure(err, stderr.Bytes())
+	}
+	return files, nil
+}
+
+// readTreeFile reads one batch response. File errors match those of os.DirFS
+// in a checkout; a returned error is a Git failure.
+func readTreeFile(reader *bufio.Reader, name string, submodule bool) (treeFile, error) {
+	fail := func(op string, err error) (treeFile, error) {
+		return treeFile{err: &fs.PathError{Op: op, Path: name, Err: err}}, nil
+	}
+	header, err := reader.ReadString('\n')
+	if err != nil {
+		return treeFile{}, err
+	}
+	header = strings.TrimSuffix(header, "\n")
+	if strings.HasSuffix(header, " missing") {
+		if submodule { // A submodule checks out as an empty directory.
+			return fail("read", errors.New("is a directory"))
+		}
+		return fail("open", fs.ErrNotExist)
+	}
+	// "<oid> <type> <size>" for objects, "<type> <size>" for unresolved links.
 	fields := strings.Fields(header)
-	if len(fields) != 3 || fields[1] != "blob" || fields[2] != strconv.FormatInt(entry.size, 10) {
-		return fail(fmt.Errorf("git cat-file: unexpected object %q", strings.TrimSpace(header)))
+	if len(fields) < 2 || len(fields) > 3 {
+		return treeFile{}, fmt.Errorf("git cat-file: unexpected response %q", header)
 	}
-	data := make([]byte, entry.size+1) // Content and a trailing newline.
-	if _, err := io.ReadFull(t.out, data); err != nil {
-		return fail(err)
+	typ := fields[len(fields)-2]
+	size, err := strconv.Atoi(fields[len(fields)-1])
+	if err != nil {
+		return treeFile{}, fmt.Errorf("git cat-file: unexpected response %q", header)
 	}
-	return data[:entry.size], nil
-}
-
-// resolve reads a file, following symbolic links one path component at a
-// time like a checkout would. Links that leave the tree do not exist.
-func (t *gitTree) resolve(name string) ([]byte, error) {
-	// Errors match those of os.DirFS in a checkout.
-	fail := func(err error) ([]byte, error) { return nil, &fs.PathError{Op: "open", Path: name, Err: err} }
-	pending := strings.Split(name, "/")
-	current, hops := "", 0
-	for len(pending) > 0 {
-		part := pending[0]
-		pending = pending[1:]
-		switch part {
-		case "", ".":
-			continue
-		case "..":
-			if current == "" {
-				return fail(fs.ErrNotExist)
-			}
-			current = parentDir(current)
-			continue
-		}
-		next := path.Join(current, part)
-		entry, ok := t.entries[next]
-		switch {
-		case ok && entry.mode == "120000":
-			if hops++; hops > 40 {
-				return fail(errors.New("too many levels of symbolic links"))
-			}
-			if entry.size > maxTreeBlob {
-				return fail(errors.New("symbolic link target too long"))
-			}
-			target, err := t.blob(entry)
-			if err != nil {
-				return nil, err
-			}
-			if path.IsAbs(string(target)) {
-				return fail(fs.ErrNotExist)
-			}
-			pending = append(strings.Split(string(target), "/"), pending...)
-		case ok && len(pending) > 0:
-			return fail(errors.New("not a directory"))
-		case ok:
-			if entry.size > maxTreeBlob {
-				return fail(fmt.Errorf("file is larger than %d bytes", maxTreeBlob))
-			}
-			return t.blob(entry)
-		case t.dirs[next]:
-			current = next
-		default:
-			return fail(fs.ErrNotExist)
-		}
+	data := make([]byte, size+1) // Content and a trailing newline.
+	if _, err := io.ReadFull(reader, data); err != nil {
+		return treeFile{}, err
 	}
-	return nil, &fs.PathError{Op: "read", Path: name, Err: errors.New("is a directory")}
-}
-
-func parentDir(dir string) string {
-	if parent := path.Dir(dir); parent != "." {
-		return parent
+	switch typ {
+	case "blob":
+		return treeFile{data: data[:size]}, nil
+	case "tree":
+		return fail("read", errors.New("is a directory"))
+	case "loop":
+		return fail("open", errors.New("too many levels of symbolic links"))
+	case "symlink", "dangling":
+		return fail("open", fs.ErrNotExist)
 	}
-	return ""
+	return treeFile{}, fmt.Errorf("git cat-file: unexpected response %q", header)
 }
 
 // treeCommand runs Git without lazy fetches of missing objects.
