@@ -12,16 +12,31 @@ import (
 
 func newStatusCommand() *cobra.Command {
 	var asJSON bool
+	var rev string
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show package versions, pending changes, and expected releases",
 		Args:  cobra.NoArgs,
+		Long: `Show package versions, pending changes, and expected releases.
+
+With --rev, read the release plan from a Git commit, tag, or tree object
+instead of the working directory. Only committed blobs are read: working tree
+changes, untracked files, and the index are ignored.`,
+		Example: `  sweet status
+  sweet status --json
+  sweet status --json --rev main
+  sweet status --json --rev "$(git merge-tree --write-tree main feature)"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			root, err := core.RepositoryRoot()
-			if err != nil {
-				return err
+			var packages []core.PackageStatus
+			var err error
+			if cmd.Flags().Changed("rev") {
+				packages, err = core.TreeStatus(rev)
+			} else {
+				var root string
+				if root, err = core.RepositoryRoot(); err == nil {
+					packages, err = core.RepositoryStatus(root)
+				}
 			}
-			packages, err := core.RepositoryStatus(root)
 			if err != nil {
 				return err
 			}
@@ -61,5 +76,6 @@ func newStatusCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Print the package inventory as JSON")
+	cmd.Flags().StringVar(&rev, "rev", "", "Read the plan from a Git commit, tag, or tree instead of the working directory")
 	return cmd
 }

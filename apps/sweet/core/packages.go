@@ -4,7 +4,6 @@ package core
 import (
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
@@ -111,11 +110,12 @@ func DiscoverPackages(root string) ([]Package, error) {
 }
 
 func discoverPackages(root string) ([]Package, []Problem, error) {
-	paths, err := repositoryFiles(root)
+	files, err := workingSnapshot(root)
 	if err != nil {
 		return nil, nil, err
 	}
-	return packagesFromFiles(root, paths)
+	packages, problems := packagesFromFiles(files)
+	return packages, problems, nil
 }
 
 func repositoryFiles(root string) ([]string, error) {
@@ -129,17 +129,17 @@ func repositoryFiles(root string) ([]string, error) {
 	return paths, nil
 }
 
-func packagesFromFiles(root string, paths []string) ([]Package, []Problem, error) {
+func packagesFromFiles(files snapshot) ([]Package, []Problem) {
 	var packages []Package
 	var problems []Problem
 	seen := make(map[string]bool)
-	for _, path := range paths {
-		if filepath.Base(path) != ".sweet.yml" || seen[path] {
+	for _, path := range files.paths {
+		if !isManifest(path) || seen[path] {
 			continue
 		}
 		seen[path] = true
-		content, err := os.ReadFile(filepath.Join(root, path))
-		if os.IsNotExist(err) {
+		content, ok, err := readOptional(files.files, path)
+		if err == nil && !ok {
 			continue
 		} // A tracked manifest may have been deleted locally.
 		var manifest packageManifest
@@ -152,7 +152,7 @@ func packagesFromFiles(root string, paths []string) ([]Package, []Problem, error
 		packages = append(packages, Package{Path: filepath.ToSlash(filepath.Dir(path)), Version: manifest.Version, Name: manifest.Name, TagPrefix: manifest.TagPrefix, Prerelease: manifest.Prerelease, versionFiles: manifest.VersionFiles})
 	}
 	sort.Slice(packages, func(i, j int) bool { return packages[i].Path < packages[j].Path })
-	return packages, problems, nil
+	return packages, problems
 }
 
 type packageManifest struct {

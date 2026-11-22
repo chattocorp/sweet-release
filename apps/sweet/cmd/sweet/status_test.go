@@ -76,3 +76,35 @@ func TestStatusPackages(t *testing.T) {
 		t.Fatalf("invalid manifest: %d, %s, %s", code, &stdout, &stderr)
 	}
 }
+
+func TestStatusRev(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, output)
+		}
+	}
+	git("init", "-q")
+	if err := os.WriteFile(".sweet.yml", []byte("version: 1.0.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("commit", "-q", "-m", "init")
+	if err := os.WriteFile(".sweet.yml", []byte("version: 2.0.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"status", "--json", "--rev", "HEAD"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("status --rev: %d: %s", code, &stderr)
+	}
+	if want := `[{"path":".","version":"1.0.0","changes":null,"bump":"none","nextVersion":"1.0.0","problems":null}]` + "\n"; stdout.String() != want {
+		t.Fatalf("output = %s, want %s", &stdout, want)
+	}
+	if code := run([]string{"status", "--rev", "missing"}, &stdout, &stderr); code == 0 {
+		t.Fatal("status --rev missing succeeded")
+	}
+}
