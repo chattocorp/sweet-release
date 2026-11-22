@@ -134,11 +134,11 @@ func packagesFromFiles(files snapshot) ([]Package, []Problem) {
 	var problems []Problem
 	seen := make(map[string]bool)
 	for _, path := range files.paths {
-		if filepath.Base(path) != ".sweet.yml" || seen[path] {
+		if !isManifest(path) || seen[path] {
 			continue
 		}
 		seen[path] = true
-		content, ok, err := readOptional(files.fsys, path)
+		content, ok, err := readOptional(files.files, path)
 		if err == nil && !ok {
 			continue
 		} // A tracked manifest may have been deleted locally.

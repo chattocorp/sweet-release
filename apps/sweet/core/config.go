@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -77,12 +78,12 @@ func LoadRepositoryConfig(dir string) (RepositoryConfig, error) {
 	if err != nil {
 		root = dir
 	}
-	return snapshotConfig(snapshot{fsys: os.DirFS(root), configPath: filepath.Join(root, ".sweet.config.yml")})
+	return snapshotConfig(snapshot{files: os.DirFS(root).(fs.ReadFileFS), configPath: filepath.Join(root, ".sweet.config.yml")})
 }
 
 // snapshotConfig reads repository settings from a snapshot's root.
 func snapshotConfig(files snapshot) (RepositoryConfig, error) {
-	data, ok, err := readOptional(files.fsys, ".sweet.config.yml")
+	data, ok, err := readOptional(files.files, ".sweet.config.yml")
 	if err != nil {
 		return RepositoryConfig{}, fmt.Errorf("read %s: %w", files.configPath, err)
 	}

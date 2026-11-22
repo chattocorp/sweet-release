@@ -3,7 +3,6 @@ package core
 import (
 	"bytes"
 	"fmt"
-	"io/fs"
 	"math/big"
 	"path/filepath"
 	"regexp"
@@ -80,9 +79,8 @@ func snapshotStatus(files snapshot, config RepositoryConfig) ([]PackageStatus, e
 	}
 	notes := make(map[string][]string)
 	for _, path := range files.paths {
-		dir := filepath.Dir(path)
-		if filepath.Base(dir) == ".sweet" && filepath.Ext(path) == ".md" {
-			pkg := filepath.ToSlash(filepath.Dir(dir))
+		if isNote(path) {
+			pkg := filepath.ToSlash(filepath.Dir(filepath.Dir(path)))
 			notes[pkg] = append(notes[pkg], path)
 		}
 	}
@@ -93,7 +91,7 @@ func snapshotStatus(files snapshot, config RepositoryConfig) ([]PackageStatus, e
 	}
 	statuses := make([]PackageStatus, 0, len(packages))
 	for _, pkg := range packages {
-		changes, problems := changesFromFiles(files.fsys, notes[pkg.Path])
+		changes, problems := changesFromFiles(files.files, notes[pkg.Path])
 		status := PackageStatus{Package: pkg, Changes: changes, Bump: "none", Problems: problems}
 		status.Problems = append(status.Problems, packageProblems[pkg.Path]...)
 		for _, change := range changes {
@@ -131,7 +129,7 @@ func snapshotStatus(files snapshot, config RepositoryConfig) ([]PackageStatus, e
 	return statuses, nil
 }
 
-func changesFromFiles(fsys fs.FS, paths []string) ([]Change, []Problem) {
+func changesFromFiles(files fileReader, paths []string) ([]Change, []Problem) {
 	var changes []Change
 	var problems []Problem
 	seen := map[string]bool{}
@@ -141,7 +139,7 @@ func changesFromFiles(fsys fs.FS, paths []string) ([]Change, []Problem) {
 		}
 		seen[path] = true
 		name := path
-		data, ok, err := readOptional(fsys, path)
+		data, ok, err := readOptional(files, path)
 		if err == nil && !ok {
 			continue
 		}

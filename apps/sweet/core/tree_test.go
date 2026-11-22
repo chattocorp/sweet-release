@@ -43,10 +43,28 @@ func TestTreeStatus(t *testing.T) {
 	write("pkg/beta/nested/.sweet.yml", "version: 2.0.0\n")
 	write("pkg/beta/nested/.sweet/bad.md", "---\ntype: typo\n---\n")
 	write("shared.md", "---\ntype: feature\n---\nLinked.\n")
-	if err := os.Symlink("../../../shared.md", filepath.Join(root, "pkg/zero/.sweet/linked.md")); err != nil {
-		t.Fatal(err)
+	write("real/n.md", "---\ntype: feature\n---\nThrough a linked directory.\n")
+	write("pkg/links/.sweet.yml", "version: 1.0.0\n")
+	write("pkg/through/.sweet.yml", "version: 1.0.0\n")
+	write("pkg/loop/.sweet.yml", "version: 1.0.0\n")
+	for link, target := range map[string]string{
+		"pkg/zero/.sweet/linked.md":    "../../../shared.md",
+		"dirlink":                      "real",
+		"pkg/through/.sweet/viadir.md": "../../../dirlink/n.md",
+		"pkg/links/.sweet/todir.md":    "../../../real",
+		"pkg/loop/.sweet/loop.md":      "loop.md",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, link)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, filepath.Join(root, link)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	git(root, "add", ".")
+	// A submodule entry checks out as an empty directory.
+	git(root, "update-index", "--add", "--cacheinfo", "160000,"+strings.Repeat("1", 40)+",vendor/sub")
+	git(root, "update-index", "--add", "--cacheinfo", "160000,"+strings.Repeat("1", 40)+",pkg/links/.sweet/sub.md")
 	git(root, "commit", "-q", "-m", "plan")
 
 	plan := func(statuses []PackageStatus, err error) string {
@@ -61,9 +79,10 @@ func TestTreeStatus(t *testing.T) {
 		return string(data)
 	}
 	checkout := filepath.Join(t.TempDir(), "checkout")
-	git(root, "clone", "-q", root, checkout)
+	git(root, "clone", "-q", "--no-local", root, checkout)
 	want := plan(RepositoryStatus(checkout))
-	for _, fragment := range []string{`"nextVersion":"1.2.4"`, `"nextVersion":"0.4.0"`, `"nextVersion":"1.3.0-beta.1"`, `unknown change type`, `"path":"pkg/zero/.sweet/linked.md"`} {
+	for _, fragment := range []string{`"nextVersion":"1.2.4"`, `"nextVersion":"0.4.0"`, `"nextVersion":"1.3.0-beta.1"`, `unknown change type`, `"path":"pkg/zero/.sweet/linked.md"`,
+		`"path":"pkg/through/.sweet/viadir.md"`, `todir.md: is a directory`, `loop.md: too many levels of symbolic links`, `sub.md: is a directory`} {
 		if !strings.Contains(want, fragment) {
 			t.Fatalf("checkout plan lacks %s: %s", fragment, want)
 		}
@@ -87,9 +106,18 @@ func TestTreeStatus(t *testing.T) {
 		}
 	}
 
+	// Geordi sets GIT_DIR and GIT_WORK_TREE to another directory.
+	t.Chdir(t.TempDir())
+	t.Setenv("GIT_DIR", filepath.Join(root, ".git"))
+	t.Setenv("GIT_WORK_TREE", t.TempDir())
+	if got := plan(TreeStatus("HEAD")); got != want {
+		t.Errorf("TreeStatus with GIT_WORK_TREE = %s\nwant %s", got, want)
+	}
+	os.Unsetenv("GIT_WORK_TREE")
+
 	// No work tree is needed.
 	bare := filepath.Join(t.TempDir(), "bare.git")
-	git(root, "clone", "-q", "--bare", root, bare)
+	git(root, "clone", "-q", "--no-local", "--bare", root, bare)
 	t.Chdir(t.TempDir())
 	t.Setenv("GIT_DIR", bare)
 	if got := plan(TreeStatus("HEAD")); got != want {
@@ -100,5 +128,20 @@ func TestTreeStatus(t *testing.T) {
 		if _, err := TreeStatus(rev); err == nil {
 			t.Errorf("TreeStatus(%q) succeeded", rev)
 		}
+	}
+
+	// Git failures fail the command instead of becoming plan problems.
+	cmd := exec.Command("git", "mktree", "--missing")
+	cmd.Stdin = strings.NewReader("100644 blob " + strings.Repeat("2", 40) + "\t.sweet.yml\n")
+	broken, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := TreeStatus(strings.TrimSpace(string(broken))); err == nil || !strings.Contains(err.Error(), "is missing") {
+		t.Errorf("missing blob: %v", err)
+	}
+	t.Setenv("GIT_DIR", filepath.Join(t.TempDir(), "none"))
+	if _, err := TreeStatus("HEAD"); err == nil || !strings.Contains(err.Error(), "not a git repository") {
+		t.Errorf("outside a repository: %v", err)
 	}
 }

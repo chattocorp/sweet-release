@@ -26,10 +26,12 @@ sweet status --json --rev "$(git merge-tree --write-tree main feature)"
 ```
 
 `--rev` reads the release plan from a Git commit, tag, or tree object instead of
-the working directory, with the same output as `status` in a clean checkout of
-it. Sweet reads only committed blobs: working tree changes, untracked files, and
-the index are ignored, and no filters or hooks run. It works from any directory
-in the repository, in bare repositories, and with `GIT_DIR` set. Use it to
+the working directory. Sweet reads only committed blobs: working tree changes,
+untracked files, and the index are ignored, and no Git filters or hooks run. The
+output equals `status` in a checkout of that tree without Git filters (eol, LFS,
+ident) and without symlinks that leave the tree. It works from any directory in
+the repository, in bare repositories, and with `GIT_DIR` set. Git failures, such
+as an unknown revision, fail the command. Use it to
 compare the plan of a pull request's target with that of the merge result
 without checking either out.
 
