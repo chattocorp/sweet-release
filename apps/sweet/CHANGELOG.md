@@ -1,5 +1,16 @@
 # Sweet Release Changelog
 
+## 0.5.0
+
+### Fixes
+
+- Update the release PR workflow artifact actions to use Node 24 instead of the end-of-life Node 20 runtime. Fix release PR cleanup when only one release PR job runs: the newer artifact download places a single result directly in the download directory, which cleanup did not find. Cleanup now finds results in either layout and fails when any are missing. ([#59](https://github.com/chattocorp/sweet-release/pull/59))
+
+### Features
+
+- Add `sweet github release <tag> [assets...]` to create or reuse a draft GitHub release with notes from the changelog (a reused draft gets the current title and notes), upload assets with replacement, and publish it as a prerelease or Latest as its version requires. Published releases are left unchanged unless you pass `--replace-published`. The `tag.yml` workflow now adds `prerelease` and `highest` (highest stable version of the package) to each `tags` entry, adds a `packages` output keyed by package path, and defaults `release-token` to `GITHUB_TOKEN`, so packages can be published from the same workflow run. ([#62](https://github.com/chattocorp/sweet-release/pull/62))
+- Add `sweet status --rev <tree-ish>` to read the release plan from a Git commit, tag, or tree object instead of the working directory, without a checkout. Only committed blobs are read; working tree changes, untracked files, and the index are ignored. Output matches `sweet status` in a checkout of that tree without Git filters (eol, LFS, ident) and without symlinks that leave the tree. ([#65](https://github.com/chattocorp/sweet-release/pull/65))
+
 ## 0.4.0
 
 ### Fixes
