@@ -187,17 +187,22 @@ func readTreeFile(reader *bufio.Reader, name string, submodule bool) (treeFile, 
 		return treeFile{}, fmt.Errorf("git cat-file: unexpected response %q", header)
 	}
 	typ := fields[len(fields)-2]
-	size, err := strconv.Atoi(fields[len(fields)-1])
-	if err != nil {
+	size, err := strconv.ParseInt(fields[len(fields)-1], 10, 64)
+	if err != nil || size < 0 {
 		return treeFile{}, fmt.Errorf("git cat-file: unexpected response %q", header)
 	}
-	data := make([]byte, size+1) // Content and a trailing newline.
-	if _, err := io.ReadFull(reader, data); err != nil {
+	if typ == "blob" {
+		data := make([]byte, size+1) // Content and a trailing newline.
+		if _, err := io.ReadFull(reader, data); err != nil {
+			return treeFile{}, err
+		}
+		return treeFile{data: data[:size]}, nil
+	}
+	// Other responses only matter by type: skip their content unbuffered.
+	if _, err := io.CopyN(io.Discard, reader, size+1); err != nil {
 		return treeFile{}, err
 	}
 	switch typ {
-	case "blob":
-		return treeFile{data: data[:size]}, nil
 	case "tree":
 		return fail("read", errors.New("is a directory"))
 	case "loop":
