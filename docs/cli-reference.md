@@ -36,11 +36,10 @@ The default status table continues to show paths.
 `sweet status --rev <tree-ish>` reads the plan from a Git commit, tag, or tree
 object (resolved with `git rev-parse <tree-ish>^{tree}`) instead of the working
 directory. Files come from `git ls-tree -r -l --full-tree` and one
-`git cat-file --batch` process that reads the config, all manifests, and all
-notes up front. No filters, hooks, index, work tree, or lazy fetches
-(`GIT_NO_LAZY_FETCH=1`) are involved. Symlinks resolve within the tree one path
-component at a time (at most 40 hops); links that leave the tree count as
-missing files. Files over 1 MiB are file problems.
+`git cat-file --batch --follow-symlinks` process that reads the config, all
+manifests, and all notes up front, so Git resolves symlinks within the tree;
+links that leave it count as missing files. No filters, hooks, index, work tree,
+or lazy fetches (`GIT_NO_LAZY_FETCH=1`) are involved.
 Output equals `status` in a checkout of that tree without Git filters (eol,
 LFS, ident) and without symlinks that leave the tree. It works with and without
 `--json`, from any directory, in bare repositories, and with `GIT_DIR` or
